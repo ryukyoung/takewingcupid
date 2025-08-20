@@ -7,8 +7,8 @@ export default class TitleScene extends Phaser.Scene {
 
   preload() {
     // 이미지, 로고, 버튼 로딩
-    this.load.image("logo", "/src/assets/images/logo.png");
-    this.load.image("background", "/src/assets/images/titlebackground.png");
+    this.load.image("logo", "assets/images/logo.png");
+    this.load.image("background", "assets/images/titlebackground.png");
   }
 
   create() {

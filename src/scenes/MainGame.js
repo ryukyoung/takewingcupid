@@ -103,13 +103,13 @@ export default class GameScene extends Phaser.Scene {
   // ===== Phaser =====
   preload() {
     const charIndex = this.registry.get("selectedCharacter") || 1;
-    this.load.image("player", `/src/assets/images/char${charIndex}.png`);
-    this.load.image("bg_far", "/src/assets/images/bg_far.png");
-    this.load.image("bg_near", "/src/assets/images/bg_near.png");
-    this.load.image("obs_square", "/src/assets/images/obs_square.png");
-    this.load.image("obs_platform", "/src/assets/images/obs_platform.png");
-    this.load.image("coin", "/src/assets/images/coin.png");
-    this.load.image("obs_pillar", "/src/assets/images/obs_pillar.png");
+    this.load.image("player", `assets/images/char${charIndex}.png`);
+    this.load.image("bg_far", "assets/images/bg_far.png");
+    this.load.image("bg_near", "assets/images/bg_near.png");
+    this.load.image("obs_square", "assets/images/obs_square.png");
+    this.load.image("obs_platform", "assets/images/obs_platform.png");
+    this.load.image("coin", "assets/images/coin.png");
+    this.load.image("obs_pillar", "assets/images/obs_pillar.png");
   }
 
   create() {
