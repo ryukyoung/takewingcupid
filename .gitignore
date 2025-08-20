@@ -1,1 +1,26 @@
+# Node.js 관련
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 빌드 산출물
+dist/
+build/
+.cache/
+.temp/
+
+# 환경변수 파일 (API 키, 비밀정보)
+.env
+.env.*
+!.env.example   # 예시용만 남기고 실제 값은 제외
+
+# 운영체제 자동 생성 파일
+.DS_Store
+Thumbs.db
+
+# IDE/에디터 관련
+.vscode/
+.idea/
+*.swp
