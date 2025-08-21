@@ -163,6 +163,21 @@ export default class GameScene extends Phaser.Scene {
       callback: () => (this.difficulty = Math.min(1, this.difficulty + 0.12)),
     });
 
+    const INTRO_MS = 3200; // 글자 보여줄 시간(원하면 조절)
+    this.isIntro = true; // 인트로 동안 스폰 멈춤
+    this.introEndAt = this.time.now + INTRO_MS;
+
+    // 인트로가 끝나면 세트 간격 리셋하고 정상화
+    this.time.delayedCall(INTRO_MS, () => {
+      this.isIntro = false;
+      // 인트로 동안 이동거리 누적 초기화해서 갑자기 스폰되지 않게
+      this.distSinceSet = 0;
+      this.nextSetDist = this.rand(
+        this.rules.setDistMin,
+        this.rules.setDistMax
+      );
+    });
+
     // Groups
     this.grpPlatforms = this.physics.add.group();
     this.grpPillars = this.physics.add.group();
@@ -170,6 +185,9 @@ export default class GameScene extends Phaser.Scene {
     this.grpFast = this.physics.add.group();
     this.wasPressing = false;
     this.pressHold = 0; // 누르고 있는 누적 시간(0~1로 정규화해서 쓸 예정)
+
+    // 시작 텍스트 코인 스폰
+    this.spawnIntroTextCoins();
 
     // Rules (tidy)
     this.rules = {
@@ -519,6 +537,100 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  spawnIntroTextCoins() {
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height * 0.4; // 화면 중앙보다 위쪽에 띄움
+
+    const scale = 2.5; // 전체 글자 크기 키움
+    const spacingX = 60 * scale; // 글자 간격 넓힘
+
+    const letterCoords = {
+      I: [
+        [0, -1],
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [0, -2],
+      ],
+      V: [
+        [-1, -2],
+        [0, -1],
+        [1, -2],
+        [0, 0],
+        [0, 1],
+      ],
+      E: [
+        [0, -2],
+        [0, -1],
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [1, -2],
+        [1, 0],
+        [1, 2],
+      ],
+      S: [
+        [0, -2],
+        [1, -2],
+        [0, -1],
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 2],
+        [1, 2],
+      ],
+      C: [
+        [1, -2],
+        [0, -2],
+        [0, -1],
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [1, 2],
+      ],
+      R: [
+        [0, -2],
+        [0, -1],
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [1, -2],
+        [1, 0],
+        [1, 1],
+        [1, 2],
+      ],
+      T: [
+        [-1, -2],
+        [0, -2],
+        [1, -2],
+        [0, -1],
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ],
+    };
+
+    const text = "IVE SECRET";
+    let startX = cx - ((text.length - 1) * spacingX) / 2;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === " ") {
+        startX += spacingX;
+        continue;
+      }
+      const coords = letterCoords[char];
+      if (!coords) continue;
+
+      for (let [dx, dy] of coords) {
+        const x = startX + dx * 12 * scale;
+        const y = cy + dy * 12 * scale;
+        this.createCoinAt(x, y);
+      }
+      startX += spacingX;
+    }
+  }
+
   // ===== Set types =====
 
   // A/C: Stairs (ascending=true: 올라가는 계단, false: 내려가는)
@@ -783,18 +895,16 @@ export default class GameScene extends Phaser.Scene {
     const dx = this.speed * dt;
     this.distSinceSet += dx;
 
-    if (this.distSinceSet >= this.nextSetDist) {
-      // 다음 세트를 화면 오른쪽 바깥에 일정 앞에서 스폰
+    if (!this.isIntro && this.distSinceSet >= this.nextSetDist) {
       const spawnX = this.scale.width + this.rules.spawnAheadPx;
       this.spawnRandomSet(spawnX);
       this.lastSetAt = this.time.now;
 
-      // 다음 간격 재설정
       this.distSinceSet = 0;
       let base = this.rand(this.rules.setDistMin, this.rules.setDistMax);
       if (this.pendingTailPad > 0) {
-        base += this.pendingTailPad; // B세트 꼬리 여백을 간격에 더함
-        this.pendingTailPad = 0; // 소모
+        base += this.pendingTailPad;
+        this.pendingTailPad = 0;
       }
       this.nextSetDist = base;
     }
