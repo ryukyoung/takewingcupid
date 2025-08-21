@@ -128,8 +128,8 @@ export default class GameScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(100, H / 2, "player");
     this.textures.get("player")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.normalizeSprite(this.player, {
-      scaleX: 1.6,
-      scaleY: 1.6,
+      scaleX: 1.4,
+      scaleY: 1.4,
       hitboxShrink: 0.8,
     });
     this.player.setCollideWorldBounds(false);
@@ -168,6 +168,8 @@ export default class GameScene extends Phaser.Scene {
     this.grpPillars = this.physics.add.group();
     this.grpCoins = this.physics.add.group({ allowGravity: false });
     this.grpFast = this.physics.add.group();
+    this.wasPressing = false;
+    this.pressHold = 0; // 누르고 있는 누적 시간(0~1로 정규화해서 쓸 예정)
 
     // Rules (tidy)
     this.rules = {
@@ -199,6 +201,18 @@ export default class GameScene extends Phaser.Scene {
       fastDoubleProb: 0.22,
       fastMaxDY: 170,
       fastSafeWindowMs: 800, // 세트 직후엔 fast 지연
+      // wings control
+      wings: {
+        gravityY: 1800,
+        fastFallMult: 1.15,
+        tapBoostVy: -320,
+        thrustMin: -540,
+        thrustMax: -1800,
+        rampTime: 0.25,
+        releaseDamp: 0.6,
+        maxVyUp: -450,
+        maxVyDown: 200,
+      },
     };
 
     // Collisions
@@ -228,7 +242,7 @@ export default class GameScene extends Phaser.Scene {
       this.player,
       this.grpCoins,
       (_p, c) => this.collectCoin(c),
-      (_p, c) => this.overlapVisible(this.player, c, 0.9, 1.05),
+      (_p, c) => this.overlapVisible(this.player, c, 0.85, 0.75),
       this
     );
 
@@ -299,7 +313,7 @@ export default class GameScene extends Phaser.Scene {
       this.normalizeSprite(c, {
         scaleX: 1,
         scaleY: 1,
-        hitboxShrink: 1.2,
+        hitboxShrink: 1.0,
         circle: true,
       });
       this.snapXY(c);
@@ -310,14 +324,35 @@ export default class GameScene extends Phaser.Scene {
     x = Math.round(x);
     y = Math.round(y);
     const coin = this.grpCoins.create(x, y, "coin"); // 코인 스프라이트 키 맞춰줘야 함
-    coin.setOrigin(0.5);
-    coin.setImmovable(true);
-    coin.body.setAllowGravity(false);
-
-    // 크기 줄이고 싶으면 여기서 조절
-    coin.setScale(0.8);
+    this.normalizeSprite(coin, {
+      scaleX: 0.9,
+      scaleY: 0.9,
+      hitboxShrink: 0.65,
+      circle: true, // 코인은 원형 히트박스
+    });
     this.snapXY(coin);
     return coin;
+  }
+  // p 아래에 cols×rows 코인 격자 깔기
+  addCoinGridBelowPlatform(
+    p,
+    cols = 3,
+    rows = 10,
+    colGap = 24,
+    rowGap = 24,
+    yPad = 16
+  ) {
+    const bottom = p.getBottomCenter(); // 플랫폼 하단 중앙
+    const startX = Math.round(p.x - ((cols - 1) * colGap) / 2); // 좌측 열 시작 x
+    const startY = Math.round(bottom.y + yPad); // 플랫폼 밑으로 yPad만큼 띄우기
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = startX + c * colGap;
+        const y = startY + r * rowGap;
+        this.createCoinAt(x, y);
+      }
+    }
   }
 
   // === 코인 패턴 함수 ===
@@ -535,6 +570,8 @@ export default class GameScene extends Phaser.Scene {
     // 오른쪽으로 띄운 중앙 플랫폼은 "거의 딱 중앙"
     const centerX = baseX + this.rand(450, 550);
     const pMid = this.createPlatformAt(centerX, centerY); // 중앙 고정
+    this.addCoinGridBelowPlatform(pMid, 10, 5, 28, 28, 40);
+
     const midX = (pTop.x + pBot.x) / 2;
     const midY = (pTop.y + pBot.y) / 2;
     this.addCoinPattern(midX, midY);
@@ -679,8 +716,49 @@ export default class GameScene extends Phaser.Scene {
     this.bgNear.tilePositionX += this.speed * this.speedNearRatio * dt;
 
     // Input
-    if (this.isPressing) this.player.setVelocityY(-340);
-    else this.player.setVelocityY(150);
+    // Wings hold-ramp
+    const j = this.rules.wings;
+    let vy = this.player.body.velocity.y;
+
+    if (this.isPressing) {
+      // 처음 눌렀을 때 킥
+      if (!this.wasPressing) {
+        vy = Math.min(vy, 0) + j.tapBoostVy;
+        this.wasPressing = true;
+      }
+
+      // 누르고 있는 시간 누적 (0 ~ 1)
+      this.pressHold += dt / j.rampTime;
+      if (this.pressHold > 1) this.pressHold = 1;
+
+      // 부드러운 "힘 차오름" 곡선 (easeInCubic)
+      const t = this.pressHold * this.pressHold * this.pressHold;
+
+      // 최소→최대 추력으로 서서히 커짐
+      const thrust = Phaser.Math.Linear(j.thrustMin, j.thrustMax, t);
+      vy += thrust * dt; // thrust는 "가속도"이므로 dt 곱함
+    } else {
+      // 버튼에서 손 뗄 때 홀드 감쇠 (빠르게 식어야 손맛이 또렷)
+      this.pressHold -= dt * 3.0;
+      if (this.pressHold < 0) this.pressHold = 0;
+
+      this.wasPressing = false;
+
+      // 중력 + 빠른 낙하
+      const falling = vy > 0;
+      const g = falling ? j.gravityY * j.fastFallMult : j.gravityY;
+      vy += g * dt;
+
+      // 상승 중에 떼면 위쪽 관성 급감 → 에이펙스 또렷
+      if (vy < 0) vy *= j.releaseDamp;
+    }
+
+    // 속도 한계
+    const softCapUp = Phaser.Math.Linear(-220, j.maxVyUp, this.pressHold);
+    if (vy < softCapUp) vy = softCapUp;
+    vy = Phaser.Math.Clamp(vy, j.maxVyUp, j.maxVyDown);
+    this.player.setVelocityY(vy);
+
     this.player.y = Phaser.Math.Clamp(
       this.player.y,
       16,
