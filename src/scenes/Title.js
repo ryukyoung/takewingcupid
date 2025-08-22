@@ -37,7 +37,7 @@ export default class TitleScene extends Phaser.Scene {
 
     startText.setInteractive({ useHandCursor: true });
     startText.on("pointerdown", () => {
-      this.scene.start("CharacterSelectScene");
+      this.scene.start("CharacterSelect");
     });
   }
 }

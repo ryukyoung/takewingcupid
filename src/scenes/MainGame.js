@@ -1,4 +1,7 @@
 // GameScene.js — distance-based set spawner (clean)
+
+import GameOver from "./GameOver";
+
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: "GameScene" });
@@ -163,21 +166,6 @@ export default class GameScene extends Phaser.Scene {
       callback: () => (this.difficulty = Math.min(1, this.difficulty + 0.12)),
     });
 
-    const INTRO_MS = 3200; // 글자 보여줄 시간(원하면 조절)
-    this.isIntro = true; // 인트로 동안 스폰 멈춤
-    this.introEndAt = this.time.now + INTRO_MS;
-
-    // 인트로가 끝나면 세트 간격 리셋하고 정상화
-    this.time.delayedCall(INTRO_MS, () => {
-      this.isIntro = false;
-      // 인트로 동안 이동거리 누적 초기화해서 갑자기 스폰되지 않게
-      this.distSinceSet = 0;
-      this.nextSetDist = this.rand(
-        this.rules.setDistMin,
-        this.rules.setDistMax
-      );
-    });
-
     // Groups
     this.grpPlatforms = this.physics.add.group();
     this.grpPillars = this.physics.add.group();
@@ -186,20 +174,17 @@ export default class GameScene extends Phaser.Scene {
     this.wasPressing = false;
     this.pressHold = 0; // 누르고 있는 누적 시간(0~1로 정규화해서 쓸 예정)
 
-    // 시작 텍스트 코인 스폰
-    this.spawnIntroTextCoins();
-
     // Rules (tidy)
     this.rules = {
       // distance-based segment
       spawnAheadPx: 10, // 화면 오른쪽 바깥에 이만큼 앞서 배치
-      setDistMin: 800, // 다음 세트까지 “주행거리(px)” 최소
+      setDistMin: 800, // 다음 세트까지 "주행거리(px)" 최소
       setDistMax: 1000, // 최대 (이 범위에서 랜덤)
       // platform
       platformScaleX: 2.8,
       platformScaleY: 2.8,
-      platformHitShrinkX: 0.7,
-      platformHitShrinkY: 0.5,
+      platformHitShrinkX: 0.9,
+      platformHitShrinkY: 0.8,
       stairStepYMin: 40,
       stairStepYMax: 70, // 계단 높이 랜덤
       twoLayerChainDistMin: 1200,
@@ -207,8 +192,8 @@ export default class GameScene extends Phaser.Scene {
       twoLayerTailPadPx: 400,
       twoLayerChainTailPadPx: 200,
       // coins
-      coinsPerPlatform: 4, // (요청대로 계단/중앙은 4개 유지)
-      coinPadMin: 20,
+      coinsPerPlatform: 6, // 6개로 증가
+      coinPadMin: 16, // 패드 줄임
       // pillars
       pillarGapYMin: 150, // 통로 최소
       pillarOffsetX: { min: 50, max: 80 }, // 위/아래 기둥 x 차이
@@ -234,7 +219,11 @@ export default class GameScene extends Phaser.Scene {
     };
 
     // Collisions
-    const hit = () => this.gameOver();
+    // Collisions 부분의 hit 정의를 이렇게 바꿔줘
+    const hit = () => {
+      this.onGameOver();
+    };
+
     this.physics.add.overlap(
       this.player,
       this.grpPlatforms,
@@ -276,9 +265,9 @@ export default class GameScene extends Phaser.Scene {
     this.nextSetDist = this.rand(this.rules.setDistMin, this.rules.setDistMax);
     this.lastSetAt = -99999;
 
-    // 첫 세트 바로 투입
-    this.spawnRandomSet(this.scale.width + this.rules.spawnAheadPx);
-    this.lastSetAt = this.time.now;
+    // Gap 코인 관련 변수들
+    this.gapCoinSpawned = false; // 현재 gap에서 코인을 스폰했는지 여부
+    this.gapCoinDistance = 0; // gap 코인 스폰 거리
 
     // Fast timer
     this.time.addEvent({
@@ -289,8 +278,33 @@ export default class GameScene extends Phaser.Scene {
     this.pendingTailPad = 0;
     this.prevSetType = null;
     this.prevSetDist = null;
+
+    // ===== Intro 관련 변수들 =====
+    this.isIntro = true;
+    this.introTextWidth = 0; // 텍스트의 실제 폭을 저장
+
+    // 인트로 부스트 시작
+    this.startIntroBoost(1800); // 1.8초 동안 가속
+
+    // 시작 텍스트 코인 스폰 (여기서 폭 계산)
+    this.spawnIntroTextCoins();
+
+    // GameOver
+    this.isGameOver = false;
+
+    this.gameOver = new GameOver(this);
+
     // Debug
     this.initDebug();
+  }
+
+  // ===== GameOver =====
+  onGameOver() {
+    if (this.isGameOver) return;
+    this.isGameOver = true;
+    this.physics.pause();
+    this.player.setTint(0xff0000);
+    this.gameOver.show();
   }
 
   // ===== Common spawners =====
@@ -313,25 +327,35 @@ export default class GameScene extends Phaser.Scene {
     this.snapXY(p);
     return p;
   }
-  addCoinsAbovePlatform(platform, count = this.rules.coinsPerPlatform) {
+  addCoinsAbovePlatform(platform, count = 6, wavePattern = null) {
     const top = platform.getTopCenter();
     const coinW = this.textures.get("coin").getSourceImage()?.width || 12;
-    const pad = Math.max(this.rules.coinPadMin, coinW + 6);
+    const pad = 34; // 패드 줄여서 더 촘촘하게
     const total = (count - 1) * pad;
     const startX = top.x - total / 2;
 
-    const amp = 10;
-    const baseY = top.y - 40;
+    const amp = 14;
+    const baseY = top.y - 38;
     for (let i = 0; i < count; i++) {
       const x = startX + i * pad;
-      // 짝수/홀수로 위아래 교차 (화면 좌표계에서 위는 y가 작아짐)
-      const y = baseY + (i % 2 === 0 ? -amp : +amp);
+      let y;
+
+      if (wavePattern === "ascending") {
+        // 올라가는 계단: 아래-위-아래-위-아래-위 패턴
+        y = baseY + (i % 2 === 0 ? +amp : -amp);
+      } else if (wavePattern === "descending") {
+        // 내려가는 계단: 위-아래-위-아래-위-아래 패턴
+        y = baseY + (i % 2 === 0 ? -amp : +amp);
+      } else {
+        // 기본값: 짝수/홀수로 위아래 교차 (화면 좌표계에서 위는 y가 작아짐)
+        y = baseY + (i % 2 === 0 ? +amp : -amp);
+      }
 
       const c = this.grpCoins.create(x, y, "coin");
       this.normalizeSprite(c, {
-        scaleX: 1,
-        scaleY: 1,
-        hitboxShrink: 1.0,
+        scaleX: 0.85, // 크기 줄임
+        scaleY: 0.85,
+        hitboxShrink: 0.9,
         circle: true,
       });
       this.snapXY(c);
@@ -351,6 +375,23 @@ export default class GameScene extends Phaser.Scene {
     this.snapXY(coin);
     return coin;
   }
+  createCoinAtScaled(x, y, scale = 0.7, hitboxShrink = 0.88) {
+    x = Math.round(x);
+    y = Math.round(y);
+    const coin = this.grpCoins.create(x, y, "coin");
+    // coin은 원형 히트박스가 손맛 좋아요
+    this.normalizeSprite(coin, {
+      scaleX: scale,
+      scaleY: scale,
+      hitboxShrink,
+      circle: true,
+    });
+    coin.setImmovable(true);
+    coin.body.setAllowGravity(false);
+    this.snapXY(coin);
+    return coin;
+  }
+
   // p 아래에 cols×rows 코인 격자 깔기
   addCoinGridBelowPlatform(
     p,
@@ -373,262 +414,227 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // === 코인 패턴 함수 ===
-  addCoinPattern(cx, cy) {
-    cx = Math.round(cx);
-    cy = Math.round(cy);
-    const pattern = Phaser.Math.Between(0, 1);
-    // 0=직선, 1=지그재그, 2=하트, 3=원형, 4=XOXO, 5=별, 6=화살
+  // === 다양한 빈공간 코인 패턴 함수들 ===
 
-    switch (pattern) {
-      /*
-      case 0: // 직선
-        for (let i = -3; i <= 3; i++) {
-          this.createCoinAt(cx + i * 40, cy);
-        }
-        break;
+  // 직선형
+  addGapCoinPattern_Line(cx, cy, isVertical = false) {
+    const count = 7;
+    const gap = 35;
 
-      case 1: // 지그재그
-        for (let i = -3; i <= 3; i++) {
-          const offsetY = i % 2 === 0 ? -20 : 20;
-          this.createCoinAt(cx + i * 40, cy + offsetY);
-        }
-        break;
-
-      case 2: // 하트 ♥
-        const heartOffsets = [
-          { x: -60, y: 0 },
-          { x: -40, y: -20 },
-          { x: -20, y: 20 },
-          { x: 0, y: -40 },
-          { x: 20, y: 20 },
-          { x: 40, y: -20 },
-          { x: 60, y: 0 },
-          { x: 0, y: 0 },
-        ];
-        heartOffsets.forEach((pt) => this.createCoinAt(cx + pt.x, cy + pt.y));
-        break;
-
-      case 3: // 원형 ⚪
-        const radius = 60;
-        for (let i = 0; i < 12; i++) {
-          const angle = Phaser.Math.DegToRad((360 / 12) * i);
-          this.createCoinAt(
-            cx + Math.cos(angle) * radius,
-            cy + Math.sin(angle) * radius
-          );
-        }
-        break;
-      */
-      case 0: // XOXO 글자
-        const letters = [
-          // X
-          { x: -200, y: -40 },
-          { x: -200, y: 40 },
-          { x: -180, y: -20 },
-          { x: -180, y: 20 },
-          { x: -160, y: 0 },
-          { x: -140, y: -20 },
-          { x: -140, y: 20 },
-          { x: -120, y: 40 },
-          { x: -120, y: -40 },
-          // O
-          { x: -90, y: -10 },
-          { x: -90, y: 10 },
-          { x: -70, y: -35 },
-          { x: -70, y: 35 },
-          { x: -50, y: -40 },
-          { x: -50, y: 40 },
-          { x: -30, y: -35 },
-          { x: -30, y: 35 },
-          { x: -10, y: -10 },
-          { x: -10, y: 10 },
-          // X
-          { x: 20, y: -40 },
-          { x: 20, y: 40 },
-          { x: 40, y: -20 },
-          { x: 40, y: 20 },
-          { x: 60, y: 0 },
-          { x: 80, y: -20 },
-          { x: 80, y: 20 },
-          { x: 100, y: 40 },
-          { x: 100, y: -40 },
-          // === Z ===
-          // 위쪽 가로줄
-          { x: 130, y: -40 },
-          { x: 150, y: -40 },
-          { x: 170, y: -40 },
-          { x: 190, y: -40 },
-          // 대각선
-          { x: 170, y: -20 },
-          { x: 150, y: 0 },
-          { x: 130, y: 20 },
-          // 아래쪽 가로줄
-          { x: 130, y: 40 },
-          { x: 150, y: 40 },
-          { x: 170, y: 40 },
-          { x: 190, y: 40 },
-        ];
-        const GRID = 10;
-        const snap = (v) => Math.round(v / GRID) * GRID;
-        letters.forEach((pt) =>
-          this.createCoinAt(cx + snap(pt.x), cy + snap(pt.y))
-        );
-        break;
-      /*
-      case 5: // 별 ⭐
-        const starOffsets = [
-          { x: 0, y: -60 },
-          { x: 18, y: -18 },
-          { x: 58, y: -18 },
-          { x: 28, y: 10 },
-          { x: 38, y: 50 },
-          { x: 0, y: 25 },
-          { x: -38, y: 50 },
-          { x: -28, y: 10 },
-          { x: -58, y: -18 },
-          { x: -18, y: -18 },
-        ];
-        starOffsets.forEach((pt) => this.createCoinAt(cx + pt.x, cy + pt.y));
-        break;
-*/
-      case 1: // 화살
-        const arrowOffsets = [
-          // ===== 화살대(몸통) =====
-          { x: -120, y: 0 },
-          { x: -100, y: 0 },
-          { x: -80, y: 0 },
-          { x: -60, y: 0 },
-          { x: -40, y: 0 },
-          { x: -20, y: 0 },
-          { x: 0, y: 0 },
-          { x: 20, y: 0 },
-          { x: 40, y: 0 },
-          { x: 60, y: 0 },
-          { x: 80, y: 0 },
-          { x: 120, y: 0 },
-          { x: 130, y: 0 },
-
-          // ===== 화살촉(앞쪽 삼각형) =====
-          { x: 140, y: 0 },
-          { x: 120, y: -20 },
-          { x: 120, y: 20 },
-          { x: 100, y: -30 },
-          { x: 100, y: 30 },
-
-          // ===== 화살 꼬리(깃털) =====
-          { x: -120, y: -20 },
-          { x: -120, y: 20 },
-          { x: -140, y: 40 },
-          { x: -140, y: -40 },
-          { x: -140, y: 0 },
-          { x: -140, y: -20 },
-          { x: -140, y: 20 },
-          { x: -160, y: -20 },
-          { x: -160, y: 20 },
-          { x: -160, y: 40 },
-          { x: -160, y: -40 },
-          { x: -180, y: -40 },
-          { x: -180, y: 40 },
-        ];
-
-        arrowOffsets.forEach((pt) => this.createCoinAt(cx + pt.x, cy + pt.y));
-        break;
+    if (isVertical) {
+      // 세로 직선
+      for (let i = 0; i < count; i++) {
+        const y = cy + (i - Math.floor(count / 2)) * gap;
+        this.createCoinAtScaled(cx, y, 0.8, 0.85);
+      }
+    } else {
+      // 가로 직선
+      for (let i = 0; i < count; i++) {
+        const x = cx + (i - Math.floor(count / 2)) * gap;
+        this.createCoinAtScaled(x, cy, 0.8, 0.85);
+      }
     }
   }
 
+  // 원형
+  addGapCoinPattern_Circle(cx, cy, radius = 70) {
+    const count = 12;
+    for (let i = 0; i < count; i++) {
+      const angle = ((360 / count) * i * Math.PI) / 180;
+      const x = cx + Math.cos(angle) * radius;
+      const y = cy + Math.sin(angle) * radius;
+      this.createCoinAtScaled(x, y, 0.8, 0.85);
+    }
+  }
+
+  // 다이아몬드
+  addGapCoinPattern_Diamond(cx, cy, size = 120) {
+    const points = [
+      { x: 0, y: -size },
+      { x: size * 0.8, y: -size * 0.8 },
+      { x: size, y: 0 },
+      { x: size * 0.8, y: size * 0.8 },
+      { x: 0, y: size },
+      { x: -size * 0.8, y: size * 0.8 },
+      { x: -size, y: 0 },
+      { x: -size * 0.8, y: -size * 0.8 },
+    ];
+
+    points.forEach((pt) => {
+      this.createCoinAtScaled(cx + pt.x, cy + pt.y, 0.8, 0.85);
+    });
+  }
+
+  // 웨이브
+  addGapCoinPattern_Wave(cx, cy, width = 240) {
+    const count = 9;
+    const stepX = width / (count - 1);
+    const amp = 50;
+
+    for (let i = 0; i < count; i++) {
+      const x = cx - width / 2 + i * stepX;
+      const t = (i / (count - 1)) * Math.PI * 2; // 2파장
+      const y = cy + Math.sin(t) * amp;
+      this.createCoinAtScaled(x, y, 0.8, 0.85);
+    }
+  }
+
+  // 하트
+  addGapCoinPattern_Heart(cx, cy, scale = 1.5) {
+    const heartPoints = [
+      { x: 0, y: -10 },
+      { x: -10, y: -20 },
+      { x: -20, y: -25 },
+      { x: -25, y: -35 },
+      { x: -20, y: -45 },
+      { x: -10, y: -48 },
+      { x: 0, y: -45 },
+      { x: 10, y: -48 },
+      { x: 20, y: -45 },
+      { x: 25, y: -35 },
+      { x: 20, y: -25 },
+      { x: 10, y: -20 },
+      { x: 0, y: -10 }, // 연결점
+    ];
+
+    heartPoints.forEach((pt) => {
+      this.createCoinAtScaled(cx + pt.x * scale, cy + pt.y * scale, 0.8, 0.85);
+    });
+  }
+
+  // === Gap 코인 스폰 함수 ===
+  spawnGapCoins() {
+    const W = this.scale.width,
+      H = this.scale.height;
+    // gap 코인은 다음 세트보다 더 오른쪽에 스폰 (장애물과 겹치지 않도록)
+    const spawnX = W + this.rules.spawnAheadPx + 200; // 300px 더 오른쪽으로
+
+    // 화면 중앙 높이에서 약간의 랜덤 변화
+    const centerY = H / 2 + this.rand(-80, 80);
+
+    // 패턴 선택 확률 (gap에서는 좀 더 단순한 패턴들 위주)
+    const gapPatterns = [
+      () => this.addGapCoinPattern_Line(spawnX, centerY, false), // 가로 직선
+      () => this.addGapCoinPattern_Line(spawnX, centerY, true), // 세로 직선
+      () => this.addGapCoinPattern_Circle(spawnX, centerY, 54), // 작은 원
+      () => this.addGapCoinPattern_Wave(spawnX, centerY, 160), // 짧은 웨이브
+      () => this.addGapCoinPattern_Heart(spawnX, centerY, 1.4), // 하트
+    ];
+
+    const randomPattern = Phaser.Utils.Array.GetRandom(gapPatterns);
+    randomPattern();
+  }
+
+  // 랜덤한 빈공간 패턴 선택 (세트 내부용)
+  addRandomGapPattern(cx, cy) {
+    const patterns = [
+      () => this.addGapCoinPattern_Line(cx, cy, false), // 가로 직선
+      () => this.addGapCoinPattern_Circle(cx, cy, 54),
+      () => this.addGapCoinPattern_Wave(cx, cy, 220),
+      () => this.addGapCoinPattern_Heart(cx, cy + 40, 1.4),
+    ];
+
+    const randomPattern = Phaser.Utils.Array.GetRandom(patterns);
+    randomPattern();
+  }
+
+  // === Intro boost (speed tween) ===
+  startIntroBoost(durationMs = 3000) {
+    // 시작 속도를 낮추고, 트윈으로 '쓱' 가속
+    this.speed = Math.max(60, this.baseSpeed * 0.4);
+    this.tweens.add({
+      targets: this,
+      speed: 500, // 부스트 목표 속도(원하면 360~400도 가능)
+      duration: durationMs,
+      ease: "Expo.Out",
+    });
+  }
+
+  // === "IVE SECRET" 텍스트 코인 ===
   spawnIntroTextCoins() {
-    const cx = this.scale.width / 2;
-    const cy = this.scale.height * 0.4; // 화면 중앙보다 위쪽에 띄움
+    const W = this.scale.width,
+      H = this.scale.height;
+    const startX = W + 140; // 화면 오른쪽 조금 밖에서 시작
+    const y = Math.round(H * 0.38); // 화면 위쪽 3/8쯤
 
-    const scale = 2.5; // 전체 글자 크기 키움
-    const spacingX = 60 * scale; // 글자 간격 넓힘
+    // 텍스트의 실제 폭을 계산하여 저장
+    this.introTextWidth = this.addCoinText("IVE SECRET", startX, y, {
+      cell: 14, // 글자 픽셀 그리드 크기
+      scale: 0.7, // 코인 스케일
+      kern: 6, // 글자 간격
+      lineWidth: 1, // 선 두께(1 픽셀)
+    });
+  }
 
-    const letterCoords = {
-      I: [
-        [0, -1],
-        [0, 0],
-        [0, 1],
-        [0, 2],
-        [0, -2],
-      ],
-      V: [
-        [-1, -2],
-        [0, -1],
-        [1, -2],
-        [0, 0],
-        [0, 1],
-      ],
-      E: [
-        [0, -2],
-        [0, -1],
-        [0, 0],
-        [0, 1],
-        [0, 2],
-        [1, -2],
-        [1, 0],
-        [1, 2],
-      ],
-      S: [
-        [0, -2],
-        [1, -2],
-        [0, -1],
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 2],
-        [1, 2],
-      ],
-      C: [
-        [1, -2],
-        [0, -2],
-        [0, -1],
-        [0, 0],
-        [0, 1],
-        [0, 2],
-        [1, 2],
-      ],
-      R: [
-        [0, -2],
-        [0, -1],
-        [0, 0],
-        [0, 1],
-        [0, 2],
-        [1, -2],
-        [1, 0],
-        [1, 1],
-        [1, 2],
-      ],
-      T: [
-        [-1, -2],
-        [0, -2],
-        [1, -2],
-        [0, -1],
-        [0, 0],
-        [0, 1],
-        [0, 2],
+  // 5x7 도트 폰트로 글자 찍기 (폭 반환하도록 수정)
+  addCoinText(text, startX, baseY, opts = {}) {
+    const cell = opts.cell ?? 14;
+    const scale = opts.scale ?? 0.7;
+    const kern = opts.kern ?? 6;
+    const lineW = opts.lineWidth ?? 1; // 선 두께(픽셀)
+
+    // 5x7 폰트 (I,V,E,S,C,R,T만 필요)
+    const F = {
+      I: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"],
+      V: ["#...#", "#...#", "#...#", "#...#", ".#.#.", ".#.#.", "..#.."],
+      E: ["#####", "#....", "###..", "#....", "#....", "#....", "#####"],
+      S: [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+      C: [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
+      R: ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+      T: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
+      " ": [
+        // 스페이스
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
       ],
     };
 
-    const text = "IVE SECRET";
-    let startX = cx - ((text.length - 1) * spacingX) / 2;
-
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === " ") {
-        startX += spacingX;
-        continue;
+    let x = startX;
+    const drawGlyph = (glyph, ox, oy) => {
+      for (let r = 0; r < glyph.length; r++) {
+        for (let c = 0; c < glyph[r].length; c++) {
+          if (glyph[r][c] !== "#") continue;
+          // 라인 두께(lineW)만큼 블록 찍기
+          for (let dr = 0; dr < lineW; dr++) {
+            for (let dc = 0; dc < lineW; dc++) {
+              const px = ox + c * cell + dc * (cell / lineW);
+              const py = oy + r * cell + dr * (cell / lineW);
+              this.createCoinAtScaled(px, py, scale, 0.88); // 작고 타이트한 히트박스
+            }
+          }
+        }
       }
-      const coords = letterCoords[char];
-      if (!coords) continue;
+    };
 
-      for (let [dx, dy] of coords) {
-        const x = startX + dx * 12 * scale;
-        const y = cy + dy * 12 * scale;
-        this.createCoinAt(x, y);
-      }
-      startX += spacingX;
+    for (const ch of text) {
+      const glyph = F[ch] || F[" "];
+      drawGlyph(glyph, x, baseY);
+      x += glyph[0].length * cell + kern; // 글자 폭 + 자간
     }
+
+    // 텍스트의 총 폭 반환
+    return x - startX;
+  }
+
+  // 텍스트 코인이 모두 화면을 지나갔는지 확인
+  isIntroTextPassed() {
+    // 텍스트가 시작된 x 좌표 + 텍스트 폭이 화면 왼쪽을 완전히 지나갔는지 확인
+    const textStartX = this.scale.width + 140; // spawnIntroTextCoins에서 사용한 startX
+
+    // 현재까지 이동한 거리 계산 (속도 * 시간)
+    const elapsedTime =
+      (this.time.now - this.scene.scene.time.startTime) / 1000;
+    const movedDistance = this.speed * elapsedTime;
+
+    // 텍스트의 끝부분이 화면 왼쪽을 지나갔는지 확인
+    const textEndX = textStartX + this.introTextWidth - movedDistance;
+
+    return textEndX < -50; // 여유를 두고 -50까지 지나가면 완전히 지나간 것으로 간주
   }
 
   // ===== Set types =====
@@ -652,7 +658,7 @@ export default class GameScene extends Phaser.Scene {
       for (let i = 0; i < 3; i++) {
         const x = baseX + i * stepX;
         const p = this.createPlatformAt(x, ys[i]);
-        this.addCoinsAbovePlatform(p, 4);
+        this.addCoinsAbovePlatform(p, 6, "ascending");
       }
     } else {
       // 왼→오로 내려가는 계단: [위][중간][아래]
@@ -660,7 +666,7 @@ export default class GameScene extends Phaser.Scene {
       for (let i = 0; i < 3; i++) {
         const x = baseX + i * stepX;
         const p = this.createPlatformAt(x, ys[i]);
-        this.addCoinsAbovePlatform(p, 4);
+        this.addCoinsAbovePlatform(p, 6, "descending");
       }
     }
   }
@@ -686,7 +692,7 @@ export default class GameScene extends Phaser.Scene {
 
     const midX = (pTop.x + pBot.x) / 2;
     const midY = (pTop.y + pBot.y) / 2;
-    this.addCoinPattern(midX, midY);
+    this.addRandomGapPattern(midX, midY);
 
     this.pendingTailPad = this.rules.twoLayerTailPadPx;
     if (this.lastSetType === "B") {
@@ -730,6 +736,11 @@ export default class GameScene extends Phaser.Scene {
       hitboxShrink: 0.85,
     });
     this.snapXY(top);
+
+    // 기둥 사이 안전한 통로에 코인 패턴 추가
+    const passageCenterX = (x1 + x2) / 2; // 기둥들 사이 + 조금 오른쪽
+    const passageCenterY = H / 2;
+    this.addRandomGapPattern(passageCenterX, passageCenterY);
   }
 
   // ===== Random set chooser =====
@@ -765,8 +776,15 @@ export default class GameScene extends Phaser.Scene {
     this.lastSetType =
       idx === 0 ? "A" : idx === 1 ? "B" : idx === 2 ? "C" : "D";
   }
+
   // ===== Fast (6s, sometimes double & diagonal) =====
   spawnFastBundle() {
+    // 인트로 중이면 Fast 스폰 금지
+    if (this.isIntro || !this.isIntroTextPassed()) {
+      this.time.delayedCall(1000, () => this.spawnFastBundle());
+      return;
+    }
+
     // 세트 직후엔 잠깐 금지 → 시야 안정
     if (this.time.now - this.lastSetAt < this.rules.fastSafeWindowMs) {
       this.time.delayedCall(this.rules.fastSafeWindowMs, () =>
@@ -778,6 +796,7 @@ export default class GameScene extends Phaser.Scene {
     this.spawnFastOne();
     if (doDouble) this.time.delayedCall(220, () => this.spawnFastOne());
   }
+
   spawnFastOne() {
     const H = this.scale.height,
       startX = this.scale.width + 50,
@@ -821,6 +840,7 @@ export default class GameScene extends Phaser.Scene {
 
   // ===== Update =====
   update(_time, delta) {
+    if (this.isGameOver) return;
     const dt = delta / 1000;
 
     // BG parallax
@@ -871,11 +891,12 @@ export default class GameScene extends Phaser.Scene {
     vy = Phaser.Math.Clamp(vy, j.maxVyUp, j.maxVyDown);
     this.player.setVelocityY(vy);
 
-    this.player.y = Phaser.Math.Clamp(
-      this.player.y,
-      16,
-      this.scale.height - 16
-    );
+    if (this.player.y > this.scale.height) {
+      this.onGameOver();
+      return;
+    }
+
+    this.player.y = Phaser.Math.Clamp(this.player.y, 16, this.scale.height);
 
     // Move left & cleanup
     const moveLeft = (grp) =>
@@ -890,25 +911,49 @@ export default class GameScene extends Phaser.Scene {
     moveLeft(this.grpPillars);
     moveLeft(this.grpCoins);
 
+    // ===== Intro 상태 체크 =====
+    if (this.isIntro && this.isIntroTextPassed()) {
+      this.isIntro = false; // 텍스트가 완전히 지나가면 인트로 종료
+    }
+
     // ===== Distance-based spawning =====
     // 이번 프레임 이동거리(px)
     const dx = this.speed * dt;
     this.distSinceSet += dx;
 
-    if (!this.isIntro && this.distSinceSet >= this.nextSetDist) {
+    // 인트로가 끝나고 텍스트가 완전히 지나간 후에만 세트 스폰
+    if (
+      !this.isIntro &&
+      this.isIntroTextPassed() &&
+      this.distSinceSet >= this.nextSetDist
+    ) {
       const spawnX = this.scale.width + this.rules.spawnAheadPx;
       this.spawnRandomSet(spawnX);
       this.lastSetAt = this.time.now;
 
       this.distSinceSet = 0;
+      this.gapCoinSpawned = false; // 새 세트가 스폰되면 gap 코인 리셋
       let base = this.rand(this.rules.setDistMin, this.rules.setDistMax);
       if (this.pendingTailPad > 0) {
         base += this.pendingTailPad;
         this.pendingTailPad = 0;
       }
       this.nextSetDist = base;
+      this.gapCoinDistance = this.nextSetDist * 0.5; // gap 중간 지점
     }
 
+    // Gap 중간 지점에서 코인 스폰
+    if (
+      !this.isIntro &&
+      this.isIntroTextPassed() &&
+      !this.gapCoinSpawned &&
+      this.distSinceSet >= this.gapCoinDistance
+    ) {
+      this.spawnGapCoins();
+      this.gapCoinSpawned = true;
+    }
+
+    // Debug draw
     this.debugDraw();
   }
 }
