@@ -1,3 +1,4 @@
+// TitleScene.js
 import Phaser from "phaser";
 
 export default class TitleScene extends Phaser.Scene {
@@ -8,23 +9,27 @@ export default class TitleScene extends Phaser.Scene {
   preload() {
     this.load.image("background", "assets/images/titlebackground.png");
     this.load.image("startbutton", "assets/images/startbutton.png");
-    this.load.audio("xoxzbgm", "assets/audio/xoxzbgm.wav");
+
+    // 혹시 Prologue에서 못 불러온 경우 대비(중복 로드는 문제 없음)
+    if (!this.cache.audio.exists("xoxzbgm")) {
+      this.load.audio("xoxzbgm", "assets/audio/xoxzbgm.wav");
+    }
+
+    // 게임용 BGM은 그대로 유지
     this.load.audio("gamebgm", "assets/audio/gamebgm.mp3");
   }
 
   create() {
-    // ===== 하드 리셋: 남아 있는 씬/입력 상태 정리 =====
-    // 1) 살아있는 다른 씬 모두 정지 (GameScene, GameOver 등)
+    // ===== 다른 씬 정리(네 코드 유지) =====
     this.game.scene.getScenes(true).forEach((s) => {
       if (s.sys.settings.key !== "TitleScene") s.scene.stop();
     });
 
-    // 2) 전역 입력 상태 초기화
     if (this.input && this.input.manager) {
-      this.input.manager.enabled = true; // 전역 입력 ON
-      this.input.enabled = true; // 이 씬 입력 ON
-      this.input.topOnly = false; // topOnly 해제
-      this.input.removeAllListeners(); // 남은 리스너 제거
+      this.input.manager.enabled = true;
+      this.input.enabled = true;
+      this.input.topOnly = false;
+      this.input.removeAllListeners();
       this.input.mouse?.releasePointerLock?.();
     }
 
@@ -38,51 +43,51 @@ export default class TitleScene extends Phaser.Scene {
     const startButton = this.add
       .image(centerX, centerY + 140, "startbutton")
       .setOrigin(0.5)
-      .setDepth(10) // 배경 위로
+      .setDepth(10)
       .setInteractive({ useHandCursor: true });
 
     startButton.on("pointerover", () => startButton.setAlpha(0.5));
     startButton.on("pointerout", () => startButton.setAlpha(1));
 
-    // TitleScene.js create() 함수에서 BGM 부분을 이렇게 수정
-    // ===== BGM =====
+    // ===== 🔊 여기서만 BGM 재생 =====
     this.bgm = this.sound.get("xoxzbgm");
-
-    // BGM이 없거나 재생 중이 아닐 때만 시작
-    if (!this.bgm) {
+    if (!this.bgm && this.cache.audio.exists("xoxzbgm")) {
       this.bgm = this.sound.add("xoxzbgm", { loop: true, volume: 0.5 });
     }
 
     const playBGM = async () => {
+      if (!this.bgm) return;
       try {
-        if (this.sound.context && this.sound.context.state === "suspended") {
-          await this.sound.context.resume();
-        }
-        if (this.sound.locked) {
-          this.sound.unlock();
+        const ctx = this.sound.context;
+        if (ctx && ctx.state !== "running") {
+          await ctx.resume();
         }
       } catch (_) {}
-
-      // 이미 재생 중이 아닐 때만 재생
       if (!this.bgm.isPlaying) {
         this.bgm.play();
       }
     };
-    // ===== Start 동작: 겹침 방지용 정리 후 CharacterSelect로 =====
+
+    // 언락 상태면 즉시, 아니면 타이틀 화면에서 첫 터치 때 재생
+    if (this.sound.locked || this.sound.context?.state === "suspended") {
+      this.input.once("pointerdown", () => playBGM());
+      this.sound.once("unlocked", () => playBGM());
+    } else {
+      playBGM();
+    }
+
+    // ===== Start → CharacterSelect =====
     startButton.once("pointerup", () => {
-      // 혹시 이전 씬/오버레이가 남아있다면 방어적으로 한 번 더 정리
       this.input.topOnly = false;
       this.input.enabled = true;
 
-      const scenes = this.game.scene.getScenes(true);
-      scenes.forEach((s) => {
+      this.game.scene.getScenes(true).forEach((s) => {
         if (s.sys.settings.key !== "TitleScene") s.scene.stop();
       });
 
       this.scene.start("CharacterSelect");
     });
 
-    // (옵션) 즉시 진단 로그: 이게 찍히면 타이틀에서 포인터 이벤트는 정상
     this.input.once("pointerdown", () =>
       console.log("[TitleScene] pointerdown OK")
     );
