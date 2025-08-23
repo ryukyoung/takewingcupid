@@ -141,7 +141,8 @@ export default class GameScene extends Phaser.Scene {
     this.load.audio("coinsound", "assets/audio/coinsound.wav");
 
     // 🔊 BGM 추가 (무한 루프)
-    this.load.audio("gamebgm", "assets/audio/gamebgm.mp3");
+    this.load.audio("gamebgm1", "assets/audio/gamebgm1.mp3");
+    this.load.audio("gamebgm2", "assets/audio/gamebgm2.mp3");
   }
 
   create() {
@@ -173,8 +174,60 @@ export default class GameScene extends Phaser.Scene {
     };
 
     // 🔊 BGM 시작 (무한 루프)
-    this.bgm = this.sound.add("gamebgm", { loop: true, volume: 0.5 });
-    this.bgm.play();
+    // 🔊 BGM: 무작위 트랙 재생 + 끝나면 다음 곡 자동 재생(무한)
+    this.bgmKeys = ["gamebgm1", "gamebgm2"];
+    this.bgm = null;
+
+    // 직전 곡과 다른 곡을 뽑아주는 헬퍼
+    this.pickNextBgmKey = () => {
+      const prev = this.bgm?.key;
+      const pool = prev
+        ? this.bgmKeys.filter((k) => k !== prev)
+        : this.bgmKeys.slice();
+      return Phaser.Utils.Array.GetRandom(pool);
+    };
+
+    // 다음 곡 재생(부드러운 크로스페이드)
+    this.playNextBgm = (fadeMs = 350, targetVol = 0.5) => {
+      const nextKey = this.pickNextBgmKey();
+      const next = this.sound.add(nextKey, { loop: false, volume: 0 });
+
+      // 곡이 끝나면 다음 곡으로
+      next.once(Phaser.Sound.Events.COMPLETE, () => {
+        if (!this.isGameOver) this.playNextBgm(fadeMs, targetVol);
+      });
+
+      // 새 곡 재생 + 페이드인
+      next.play();
+      this.tweens.add({ targets: next, volume: targetVol, duration: fadeMs });
+
+      // 이전 곡 페이드아웃 후 정리
+      if (this.bgm) {
+        this.tweens.add({
+          targets: this.bgm,
+          volume: 0,
+          duration: fadeMs,
+          onComplete: () => {
+            this.bgm.stop();
+            this.bgm.destroy();
+          },
+        });
+      }
+      this.bgm = next;
+    };
+
+    // 최초 1회 시작
+    this.playNextBgm();
+
+    // 씬 종료/파괴 시 안전 정리
+    this.events.once("shutdown", () => {
+      this.bgm?.stop();
+      this.bgm?.destroy();
+    });
+    this.events.once("destroy", () => {
+      this.bgm?.stop();
+      this.bgm?.destroy();
+    });
 
     // 씬 종료 시 혹시 남아있으면 정리
     this.events.once("shutdown", () => this.bgm?.stop());
@@ -403,6 +456,8 @@ export default class GameScene extends Phaser.Scene {
 
     // 🔇 BGM 정지
     this.bgm?.stop();
+    this.bgm?.destroy();
+    this.bgm = null;
 
     this.sfxDie.play();
     this.physics.pause();

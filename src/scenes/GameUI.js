@@ -22,7 +22,7 @@ export default class GameUI {
     this.scoreText = this.scene.add
       .text(30, 20, "Score: 0", {
         fontSize: "24px",
-        fontFamily: "DOSmyungjo",
+        fontFamily: "DOSMyungjo",
         color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 3,
@@ -51,7 +51,7 @@ export default class GameUI {
     this.coinText = this.scene.add
       .text(width - 80, 20, "×0", {
         fontSize: "24px",
-        fontFamily: "DOSmyungjo",
+        fontFamily: "DOSMyungjo",
         color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 3,
