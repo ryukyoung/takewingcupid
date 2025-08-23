@@ -13,6 +13,7 @@ export default class GameScene extends Phaser.Scene {
     const texH = tex ? tex.height : 16;
     return texH * this.rules.platformScaleY;
   }
+
   // ===== Utils =====
   normalizeSprite(
     sprite,
@@ -125,6 +126,7 @@ export default class GameScene extends Phaser.Scene {
     const W = this.scale.width,
       H = this.scale.height;
     this.cameras.main.roundPixels = true;
+    this.sceneStartAt = this.time.now;
 
     // BG
     this.bgFar = this.add.tileSprite(0, 0, W, H, "bg_far").setOrigin(0);
@@ -177,39 +179,33 @@ export default class GameScene extends Phaser.Scene {
     this.grpCoins = this.physics.add.group({ allowGravity: false });
     this.grpFast = this.physics.add.group();
     this.wasPressing = false;
-    this.pressHold = 0; // 누르고 있는 누적 시간(0~1로 정규화해서 쓸 예정)
+    this.pressHold = 0; // 누르고 있는 누적 시간(0~1)
 
-    // Rules (tidy)
+    // Rules
     this.rules = {
-      // distance-based segment
-      spawnAheadPx: 10, // 화면 오른쪽 바깥에 이만큼 앞서 배치
-      setDistMin: 800, // 다음 세트까지 "주행거리(px)" 최소
-      setDistMax: 1000, // 최대 (이 범위에서 랜덤)
-      // platform
+      spawnAheadPx: 10,
+      setDistMin: 800,
+      setDistMax: 1000,
       platformScaleX: 2.8,
       platformScaleY: 2.8,
       platformHitShrinkX: 0.9,
       platformHitShrinkY: 0.8,
       stairStepYMin: 40,
-      stairStepYMax: 70, // 계단 높이 랜덤
+      stairStepYMax: 70,
       twoLayerChainDistMin: 1200,
       twoLayerChainDistMax: 2000,
       twoLayerTailPadPx: 400,
       twoLayerChainTailPadPx: 200,
-      // coins
-      coinsPerPlatform: 6, // 6개로 증가
-      coinPadMin: 16, // 패드 줄임
-      // pillars
-      pillarGapYMin: 150, // 통로 최소
-      pillarOffsetX: { min: 50, max: 80 }, // 위/아래 기둥 x 차이
-      // fast (6초마다, 2연속/대각선 확률)
+      coinsPerPlatform: 6,
+      coinPadMin: 16,
+      pillarGapYMin: 150,
+      pillarOffsetX: { min: 50, max: 80 },
       fastPeriodMs: 7000,
       fastSpeedRatio: 1.85,
       fastDiagonalProb: 0.3,
       fastDoubleProb: 0.22,
       fastMaxDY: 170,
-      fastSafeWindowMs: 800, // 세트 직후엔 fast 지연
-      // wings control
+      fastSafeWindowMs: 800,
       wings: {
         gravityY: 1800,
         fastFallMult: 1.15,
@@ -223,8 +219,7 @@ export default class GameScene extends Phaser.Scene {
       },
     };
 
-    // Collisions
-    // Collisions 부분의 hit 정의를 이렇게 바꿔줘
+    // Collisions → hit 시 게임오버
     const hit = () => {
       this.onGameOver();
     };
@@ -258,18 +253,21 @@ export default class GameScene extends Phaser.Scene {
       this
     );
 
-    // GameUI
-    this.coinCount = 0; // 코인 개수 추가
-    this.gameUI = new GameUI(this);
+    // ===== Score & UI (ONLY GameUI) =====
+    this.score = 0;
+    this.coinCount = 0;
+    this.gameUI = new GameUI(this); // ✅ 게임 내 유일한 UI
+    this.gameUI.updateScore(0); // ✅ UI 초기화
+    this.gameUI.updateCoinCount(0); // ✅ UI 초기화
 
     // ===== Distance-based set scheduler =====
-    this.distSinceSet = 0; // 마지막 세트 이후 주행거리(px)
+    this.distSinceSet = 0;
     this.nextSetDist = this.rand(this.rules.setDistMin, this.rules.setDistMax);
     this.lastSetAt = -99999;
 
-    // Gap 코인 관련 변수들
-    this.gapCoinSpawned = false; // 현재 gap에서 코인을 스폰했는지 여부
-    this.gapCoinDistance = 0; // gap 코인 스폰 거리
+    // Gap coin flags
+    this.gapCoinSpawned = false;
+    this.gapCoinDistance = 0;
 
     // Fast timer
     this.time.addEvent({
@@ -281,25 +279,42 @@ export default class GameScene extends Phaser.Scene {
     this.prevSetType = null;
     this.prevSetDist = null;
 
-    // ===== Intro 관련 변수들 =====
+    // ===== Intro =====
     this.isIntro = true;
-    this.introTextWidth = 0; // 텍스트의 실제 폭을 저장
+    this.introTextWidth = 0;
 
-    // 인트로 부스트 시작
-    this.startIntroBoost(1800); // 1.8초 동안 가속
+    // 인트로 부스트
+    this.startIntroBoost(1800);
 
-    // 시작 텍스트 코인 스폰 (여기서 폭 계산)
+    // 시작 텍스트 코인
     this.spawnIntroTextCoins();
 
     // GameOver
     this.isGameOver = false;
-
     this.gameOver = new GameOver(this);
 
-    // Score
-    this.score = 0;
-    this.coinCount = 0;
-    this.gameUI = new GameUI(this);
+    // create() 끝부분에 추가
+    this._lastSpeedApplied = null;
+    const applyScrollSpeed = () => {
+      if (this._lastSpeedApplied === this.speed) return;
+      const vx = -this.speed;
+      const apply = (grp) =>
+        grp.children.iterate((o) => {
+          if (!o || !o.active || !o.body) return;
+          if (o.getData?.("isFast")) return; // 패스트 제외
+          o.body.setVelocityX(vx);
+          o.body.setVelocityY(0);
+        });
+      apply(this.grpPlatforms);
+      apply(this.grpPillars);
+      apply(this.grpCoins);
+      this._lastSpeedApplied = this.speed;
+    };
+    this.applyScrollSpeed = applyScrollSpeed;
+
+    // update() 맨 앞/중간쯤에 호출
+    this.applyScrollSpeed();
+
     // Debug
     this.initDebug();
   }
@@ -310,8 +325,8 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = true;
     this.physics.pause();
     this.player.setTint(0xff0000);
-    this.gameUI.setVisible(false);
-    this.gameOver.show();
+    this.gameUI.setVisible(false); // ✅ UI 숨김
+    this.gameOver.show(this.score); // 점수 넘겨도 됨(옵션)
   }
 
   // ===== Common spawners =====
@@ -334,10 +349,10 @@ export default class GameScene extends Phaser.Scene {
     this.snapXY(p);
     return p;
   }
+
   addCoinsAbovePlatform(platform, count = 6, wavePattern = null) {
     const top = platform.getTopCenter();
-    const coinW = this.textures.get("coin").getSourceImage()?.width || 12;
-    const pad = 34; // 패드 줄여서 더 촘촘하게
+    const pad = 34;
     const total = (count - 1) * pad;
     const startX = top.x - total / 2;
 
@@ -346,21 +361,14 @@ export default class GameScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       const x = startX + i * pad;
       let y;
-
-      if (wavePattern === "ascending") {
-        // 올라가는 계단: 아래-위-아래-위-아래-위 패턴
-        y = baseY + (i % 2 === 0 ? +amp : -amp);
-      } else if (wavePattern === "descending") {
-        // 내려가는 계단: 위-아래-위-아래-위-아래 패턴
+      if (wavePattern === "ascending") y = baseY + (i % 2 === 0 ? +amp : -amp);
+      else if (wavePattern === "descending")
         y = baseY + (i % 2 === 0 ? -amp : +amp);
-      } else {
-        // 기본값: 짝수/홀수로 위아래 교차 (화면 좌표계에서 위는 y가 작아짐)
-        y = baseY + (i % 2 === 0 ? +amp : -amp);
-      }
+      else y = baseY + (i % 2 === 0 ? +amp : -amp);
 
       const c = this.grpCoins.create(x, y, "coin");
       this.normalizeSprite(c, {
-        scaleX: 0.85, // 크기 줄임
+        scaleX: 0.85,
         scaleY: 0.85,
         hitboxShrink: 0.9,
         circle: true,
@@ -372,12 +380,12 @@ export default class GameScene extends Phaser.Scene {
   createCoinAt(x, y) {
     x = Math.round(x);
     y = Math.round(y);
-    const coin = this.grpCoins.create(x, y, "coin"); // 코인 스프라이트 키 맞춰줘야 함
+    const coin = this.grpCoins.create(x, y, "coin");
     this.normalizeSprite(coin, {
       scaleX: 0.9,
       scaleY: 0.9,
       hitboxShrink: 0.65,
-      circle: true, // 코인은 원형 히트박스
+      circle: true,
     });
     this.snapXY(coin);
     return coin;
@@ -386,7 +394,6 @@ export default class GameScene extends Phaser.Scene {
     x = Math.round(x);
     y = Math.round(y);
     const coin = this.grpCoins.create(x, y, "coin");
-    // coin은 원형 히트박스가 손맛 좋아요
     this.normalizeSprite(coin, {
       scaleX: scale,
       scaleY: scale,
@@ -399,7 +406,6 @@ export default class GameScene extends Phaser.Scene {
     return coin;
   }
 
-  // p 아래에 cols×rows 코인 격자 깔기
   addCoinGridBelowPlatform(
     p,
     cols = 3,
@@ -408,10 +414,9 @@ export default class GameScene extends Phaser.Scene {
     rowGap = 24,
     yPad = 16
   ) {
-    const bottom = p.getBottomCenter(); // 플랫폼 하단 중앙
-    const startX = Math.round(p.x - ((cols - 1) * colGap) / 2); // 좌측 열 시작 x
-    const startY = Math.round(bottom.y + yPad); // 플랫폼 밑으로 yPad만큼 띄우기
-
+    const bottom = p.getBottomCenter();
+    const startX = Math.round(p.x - ((cols - 1) * colGap) / 2);
+    const startY = Math.round(bottom.y + yPad);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const x = startX + c * colGap;
@@ -421,29 +426,22 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // === 다양한 빈공간 코인 패턴 함수들 ===
-
-  // 직선형
+  // === Gap coin patterns ===
   addGapCoinPattern_Line(cx, cy, isVertical = false) {
     const count = 7;
     const gap = 35;
-
     if (isVertical) {
-      // 세로 직선
       for (let i = 0; i < count; i++) {
         const y = cy + (i - Math.floor(count / 2)) * gap;
         this.createCoinAtScaled(cx, y, 0.8, 0.85);
       }
     } else {
-      // 가로 직선
       for (let i = 0; i < count; i++) {
         const x = cx + (i - Math.floor(count / 2)) * gap;
         this.createCoinAtScaled(x, cy, 0.8, 0.85);
       }
     }
   }
-
-  // 원형
   addGapCoinPattern_Circle(cx, cy, radius = 70) {
     const count = 12;
     for (let i = 0; i < count; i++) {
@@ -453,8 +451,6 @@ export default class GameScene extends Phaser.Scene {
       this.createCoinAtScaled(x, y, 0.8, 0.85);
     }
   }
-
-  // 다이아몬드
   addGapCoinPattern_Diamond(cx, cy, size = 120) {
     const points = [
       { x: 0, y: -size },
@@ -466,27 +462,21 @@ export default class GameScene extends Phaser.Scene {
       { x: -size, y: 0 },
       { x: -size * 0.8, y: -size * 0.8 },
     ];
-
     points.forEach((pt) => {
       this.createCoinAtScaled(cx + pt.x, cy + pt.y, 0.8, 0.85);
     });
   }
-
-  // 웨이브
   addGapCoinPattern_Wave(cx, cy, width = 240) {
     const count = 9;
     const stepX = width / (count - 1);
     const amp = 50;
-
     for (let i = 0; i < count; i++) {
       const x = cx - width / 2 + i * stepX;
-      const t = (i / (count - 1)) * Math.PI * 2; // 2파장
+      const t = (i / (count - 1)) * Math.PI * 2;
       const y = cy + Math.sin(t) * amp;
       this.createCoinAtScaled(x, y, 0.8, 0.85);
     }
   }
-
-  // 하트
   addGapCoinPattern_Heart(cx, cy, scale = 1.5) {
     const heartPoints = [
       { x: 0, y: -10 },
@@ -501,57 +491,47 @@ export default class GameScene extends Phaser.Scene {
       { x: 25, y: -35 },
       { x: 20, y: -25 },
       { x: 10, y: -20 },
-      { x: 0, y: -10 }, // 연결점
+      { x: 0, y: -10 },
     ];
-
     heartPoints.forEach((pt) => {
       this.createCoinAtScaled(cx + pt.x * scale, cy + pt.y * scale, 0.8, 0.85);
     });
   }
 
-  // === Gap 코인 스폰 함수 ===
+  // === Gap coin spawner ===
   spawnGapCoins() {
     const W = this.scale.width,
       H = this.scale.height;
-    // gap 코인은 다음 세트보다 더 오른쪽에 스폰 (장애물과 겹치지 않도록)
-    const spawnX = W + this.rules.spawnAheadPx + 200; // 300px 더 오른쪽으로
-
-    // 화면 중앙 높이에서 약간의 랜덤 변화
+    const spawnX = W + this.rules.spawnAheadPx + 200;
     const centerY = H / 2 + this.rand(-80, 80);
 
-    // 패턴 선택 확률 (gap에서는 좀 더 단순한 패턴들 위주)
     const gapPatterns = [
-      () => this.addGapCoinPattern_Line(spawnX, centerY, false), // 가로 직선
-      () => this.addGapCoinPattern_Line(spawnX, centerY, true), // 세로 직선
-      () => this.addGapCoinPattern_Circle(spawnX, centerY, 54), // 작은 원
-      () => this.addGapCoinPattern_Wave(spawnX, centerY, 160), // 짧은 웨이브
-      () => this.addGapCoinPattern_Heart(spawnX, centerY, 1.4), // 하트
+      () => this.addGapCoinPattern_Line(spawnX, centerY, false),
+      () => this.addGapCoinPattern_Line(spawnX, centerY, true),
+      () => this.addGapCoinPattern_Circle(spawnX, centerY, 54),
+      () => this.addGapCoinPattern_Wave(spawnX, centerY, 160),
+      () => this.addGapCoinPattern_Heart(spawnX, centerY, 1.4),
     ];
-
-    const randomPattern = Phaser.Utils.Array.GetRandom(gapPatterns);
-    randomPattern();
+    Phaser.Utils.Array.GetRandom(gapPatterns)();
   }
 
-  // 랜덤한 빈공간 패턴 선택 (세트 내부용)
+  // 랜덤한 빈공간 패턴 (세트 내부)
   addRandomGapPattern(cx, cy) {
     const patterns = [
-      () => this.addGapCoinPattern_Line(cx, cy, false), // 가로 직선
+      () => this.addGapCoinPattern_Line(cx, cy, false),
       () => this.addGapCoinPattern_Circle(cx, cy, 54),
       () => this.addGapCoinPattern_Wave(cx, cy, 220),
       () => this.addGapCoinPattern_Heart(cx, cy + 40, 1.4),
     ];
-
-    const randomPattern = Phaser.Utils.Array.GetRandom(patterns);
-    randomPattern();
+    Phaser.Utils.Array.GetRandom(patterns)();
   }
 
-  // === Intro boost (speed tween) ===
+  // === Intro boost ===
   startIntroBoost(durationMs = 3000) {
-    // 시작 속도를 낮추고, 트윈으로 '쓱' 가속
     this.speed = Math.max(60, this.baseSpeed * 0.4);
     this.tweens.add({
       targets: this,
-      speed: 500, // 부스트 목표 속도(원하면 360~400도 가능)
+      speed: 500,
       duration: durationMs,
       ease: "Expo.Out",
     });
@@ -561,26 +541,23 @@ export default class GameScene extends Phaser.Scene {
   spawnIntroTextCoins() {
     const W = this.scale.width,
       H = this.scale.height;
-    const startX = W + 140; // 화면 오른쪽 조금 밖에서 시작
-    const y = Math.round(H * 0.38); // 화면 위쪽 3/8쯤
-
-    // 텍스트의 실제 폭을 계산하여 저장
+    const startX = W + 140;
+    const y = Math.round(H * 0.38);
     this.introTextWidth = this.addCoinText("IVE SECRET", startX, y, {
-      cell: 14, // 글자 픽셀 그리드 크기
-      scale: 0.7, // 코인 스케일
-      kern: 6, // 글자 간격
-      lineWidth: 1, // 선 두께(1 픽셀)
+      cell: 14,
+      scale: 0.7,
+      kern: 6,
+      lineWidth: 1,
     });
   }
 
-  // 5x7 도트 폰트로 글자 찍기 (폭 반환하도록 수정)
+  // 5x7 도트 폰트(폭 반환)
   addCoinText(text, startX, baseY, opts = {}) {
     const cell = opts.cell ?? 14;
     const scale = opts.scale ?? 0.7;
     const kern = opts.kern ?? 6;
-    const lineW = opts.lineWidth ?? 1; // 선 두께(픽셀)
+    const lineW = opts.lineWidth ?? 1;
 
-    // 5x7 폰트 (I,V,E,S,C,R,T만 필요)
     const F = {
       I: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"],
       V: ["#...#", "#...#", "#...#", "#...#", ".#.#.", ".#.#.", "..#.."],
@@ -589,16 +566,7 @@ export default class GameScene extends Phaser.Scene {
       C: [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
       R: ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
       T: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
-      " ": [
-        // 스페이스
-        ".....",
-        ".....",
-        ".....",
-        ".....",
-        ".....",
-        ".....",
-        ".....",
-      ],
+      " ": [".....", ".....", ".....", ".....", ".....", ".....", "....."],
     };
 
     let x = startX;
@@ -606,12 +574,11 @@ export default class GameScene extends Phaser.Scene {
       for (let r = 0; r < glyph.length; r++) {
         for (let c = 0; c < glyph[r].length; c++) {
           if (glyph[r][c] !== "#") continue;
-          // 라인 두께(lineW)만큼 블록 찍기
           for (let dr = 0; dr < lineW; dr++) {
             for (let dc = 0; dc < lineW; dc++) {
               const px = ox + c * cell + dc * (cell / lineW);
               const py = oy + r * cell + dr * (cell / lineW);
-              this.createCoinAtScaled(px, py, scale, 0.88); // 작고 타이트한 히트박스
+              this.createCoinAtScaled(px, py, scale, 0.88);
             }
           }
         }
@@ -621,32 +588,31 @@ export default class GameScene extends Phaser.Scene {
     for (const ch of text) {
       const glyph = F[ch] || F[" "];
       drawGlyph(glyph, x, baseY);
-      x += glyph[0].length * cell + kern; // 글자 폭 + 자간
+      x += glyph[0].length * cell + kern;
     }
-
-    // 텍스트의 총 폭 반환
     return x - startX;
   }
 
-  // 텍스트 코인이 모두 화면을 지나갔는지 확인
   isIntroTextPassed() {
-    // 텍스트가 시작된 x 좌표 + 텍스트 폭이 화면 왼쪽을 완전히 지나갔는지 확인
-    const textStartX = this.scale.width + 140; // spawnIntroTextCoins에서 사용한 startX
+    // 인트로 텍스트 시작 X(동일)
+    const textStartX = this.scale.width + 140;
 
-    // 현재까지 이동한 거리 계산 (속도 * 시간)
-    const elapsedTime =
-      (this.time.now - this.scene.scene.time.startTime) / 1000;
-    const movedDistance = this.speed * elapsedTime;
+    // ✅ 안전한 경과 시간 계산 (초)
+    const elapsedSec = Math.max(
+      0,
+      (this.time.now - (this.sceneStartAt || this.time.now)) / 1000
+    );
 
-    // 텍스트의 끝부분이 화면 왼쪽을 지나갔는지 확인
-    const textEndX = textStartX + this.introTextWidth - movedDistance;
+    // ✅ 이동 거리(속도 변화 고려: 너무 작거나 큰 값 방지)
+    const speed = Phaser.Math.Clamp(this.speed || 0, 60, 800);
+    const movedDistance = speed * elapsedSec;
 
-    return textEndX < -50; // 여유를 두고 -50까지 지나가면 완전히 지나간 것으로 간주
+    // 텍스트의 오른쪽 끝이 화면 왼쪽을 지나쳤는지 판정
+    const textEndX = textStartX + (this.introTextWidth || 0) - movedDistance;
+    return textEndX < -50;
   }
 
   // ===== Set types =====
-
-  // A/C: Stairs (ascending=true: 올라가는 계단, false: 내려가는)
   spawnSet_Stairs(baseX, ascending = true) {
     const H = this.scale.height;
     const stepX = 210;
@@ -655,12 +621,10 @@ export default class GameScene extends Phaser.Scene {
       this.rules.stairStepYMax
     );
 
-    // "가장 아래" 플랫폼이 화면 바닥에 딱 붙도록 중심 y 계산
-    const ph = this.getPlatformDisplayHeight(); // 표시 높이
-    const bottomY = H - ph / 2; // 스프라이트 중심 y
+    const ph = this.getPlatformDisplayHeight();
+    const bottomY = H - ph / 2;
 
     if (ascending) {
-      // 왼→오로 올라가는 계단: [아래][중간][위]
       const ys = [bottomY, bottomY - stepY, bottomY - 2 * stepY];
       for (let i = 0; i < 3; i++) {
         const x = baseX + i * stepX;
@@ -668,7 +632,6 @@ export default class GameScene extends Phaser.Scene {
         this.addCoinsAbovePlatform(p, 6, "ascending");
       }
     } else {
-      // 왼→오로 내려가는 계단: [위][중간][아래]
       const ys = [bottomY - 2 * stepY, bottomY - stepY, bottomY];
       for (let i = 0; i < 3; i++) {
         const x = baseX + i * stepX;
@@ -678,23 +641,20 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // B: Two-layer block + (offset) single center
   spawnSet_TwoLayerAndCenter(baseX) {
     const H = this.scale.height;
     const jitter = this.rand(-6, 6);
-    const centerY = Math.round(H / 2) + jitter; // 화면 정중앙
-    const gapY = this.rand(250, 290); // 통로 높이(원래 범위 유지)
+    const centerY = Math.round(H / 2) + jitter;
+    const gapY = this.rand(250, 290);
 
-    // 2층 블록은 중앙을 기준으로 위/아래에 대칭 배치
     const topY = centerY - gapY / 2;
     const botY = centerY + gapY / 2;
 
     const pTop = this.createPlatformAt(baseX, topY);
     const pBot = this.createPlatformAt(baseX, botY);
 
-    // 오른쪽으로 띄운 중앙 플랫폼은 "거의 딱 중앙"
     const centerX = baseX + this.rand(450, 550);
-    const pMid = this.createPlatformAt(centerX, centerY); // 중앙 고정
+    const pMid = this.createPlatformAt(centerX, centerY);
     this.addCoinGridBelowPlatform(pMid, 10, 5, 28, 28, 40);
 
     const midX = (pTop.x + pBot.x) / 2;
@@ -703,12 +663,10 @@ export default class GameScene extends Phaser.Scene {
 
     this.pendingTailPad = this.rules.twoLayerTailPadPx;
     if (this.lastSetType === "B") {
-      // B가 연속이면 더 늘림(옵션)
       this.pendingTailPad += this.rules.twoLayerChainTailPadPx || 0;
     }
   }
 
-  // D: Pillars (bottom + top) — 통로 강제
   spawnSet_Pillars(baseX) {
     const H = this.scale.height;
     const passageY = this.rand(140, H - 140);
@@ -719,7 +677,6 @@ export default class GameScene extends Phaser.Scene {
       baseX +
       this.rand(this.rules.pillarOffsetX.min, this.rules.pillarOffsetX.max);
 
-    // 기둥
     const bottom = this.grpPillars.create(x1, 0, "obs_pillar");
     bottom.setImmovable(true);
     bottom.body.setAllowGravity(false);
@@ -744,16 +701,14 @@ export default class GameScene extends Phaser.Scene {
     });
     this.snapXY(top);
 
-    // 기둥 사이 안전한 통로에 코인 패턴 추가
-    const passageCenterX = (x1 + x2) / 2; // 기둥들 사이 + 조금 오른쪽
+    const passageCenterX = (x1 + x2) / 2;
     const passageCenterY = H / 2;
     this.addRandomGapPattern(passageCenterX, passageCenterY);
   }
 
   // ===== Random set chooser =====
   spawnRandomSet(baseX) {
-    // 가독성 좋은 가중치
-    const weights = [1, 1, 1, 0.8]; // A,B,C, Pillars
+    const weights = [1, 1, 1, 0.8]; // A,B,C,D
     const total = weights.reduce((s, w) => s + w, 0);
     let r = Math.random() * total,
       idx = 0;
@@ -766,33 +721,29 @@ export default class GameScene extends Phaser.Scene {
     switch (idx) {
       case 0:
         this.spawnSet_Stairs(baseX, true);
-        break; // 올라감
+        break;
       case 1:
         this.spawnSet_TwoLayerAndCenter(baseX);
         break;
       case 2:
         this.spawnSet_Stairs(baseX, false);
-        break; // 내려감
+        break;
       case 3:
       default:
         this.spawnSet_Pillars(baseX);
         break;
     }
-    // switch 이후, 세트 실제 스폰이 끝난 직후
     this.prevSetType = this.lastSetType;
     this.lastSetType =
       idx === 0 ? "A" : idx === 1 ? "B" : idx === 2 ? "C" : "D";
   }
 
-  // ===== Fast (6s, sometimes double & diagonal) =====
+  // ===== Fast =====
   spawnFastBundle() {
-    // 인트로 중이면 Fast 스폰 금지
     if (this.isIntro || !this.isIntroTextPassed()) {
       this.time.delayedCall(1000, () => this.spawnFastBundle());
       return;
     }
-
-    // 세트 직후엔 잠깐 금지 → 시야 안정
     if (this.time.now - this.lastSetAt < this.rules.fastSafeWindowMs) {
       this.time.delayedCall(this.rules.fastSafeWindowMs, () =>
         this.spawnFastBundle()
@@ -826,28 +777,16 @@ export default class GameScene extends Phaser.Scene {
     this.time.delayedCall(8000, () => f?.destroy());
   }
 
-  // ===== Score & Over =====
+  // ===== Score & Coins (UI 업데이트 전용) =====
   collectCoin(coin) {
-    this.coinCount++; // ✅ 코인 개수 증가
-    this.addScore(5);
-
-    // UI 업데이트
-    this.gameUI.updateCoinCount(this.coinCount); // ✅ 코인 개수 UI 업데이트
-
-    this.tweens.add({
-      targets: coin,
-      duration: 120,
-      scale: 1.3,
-      alpha: 0,
-      onComplete: () => coin.destroy(),
-    });
+    this.coinCount++; // 내부 수치만 증가
+    this.addScore(5); // 점수 추가
+    this.gameUI.updateCoinCount(this.coinCount); // ✅ UI에 반영
+    coin.destroy();
   }
   addScore(n = 10) {
     this.score += n;
-    this.gameUI.updateScore(this.score);
-  }
-  gameOver() {
-    this.scene.restart();
+    this.gameUI.updateScore(this.score); // ✅ UI에 반영
   }
 
   // ===== Update =====
@@ -859,45 +798,31 @@ export default class GameScene extends Phaser.Scene {
     this.bgFar.tilePositionX += this.speed * this.speedFarRatio * dt;
     this.bgNear.tilePositionX += this.speed * this.speedNearRatio * dt;
 
-    // Input
-    // Wings hold-ramp
+    // Input / Wings
     const j = this.rules.wings;
     let vy = this.player.body.velocity.y;
 
     if (this.isPressing) {
-      // 처음 눌렀을 때 킥
       if (!this.wasPressing) {
         vy = Math.min(vy, 0) + j.tapBoostVy;
         this.wasPressing = true;
       }
-
-      // 누르고 있는 시간 누적 (0 ~ 1)
       this.pressHold += dt / j.rampTime;
       if (this.pressHold > 1) this.pressHold = 1;
-
-      // 부드러운 "힘 차오름" 곡선 (easeInCubic)
       const t = this.pressHold * this.pressHold * this.pressHold;
-
-      // 최소→최대 추력으로 서서히 커짐
       const thrust = Phaser.Math.Linear(j.thrustMin, j.thrustMax, t);
-      vy += thrust * dt; // thrust는 "가속도"이므로 dt 곱함
+      vy += thrust * dt;
     } else {
-      // 버튼에서 손 뗄 때 홀드 감쇠 (빠르게 식어야 손맛이 또렷)
       this.pressHold -= dt * 3.0;
       if (this.pressHold < 0) this.pressHold = 0;
-
       this.wasPressing = false;
 
-      // 중력 + 빠른 낙하
       const falling = vy > 0;
       const g = falling ? j.gravityY * j.fastFallMult : j.gravityY;
       vy += g * dt;
-
-      // 상승 중에 떼면 위쪽 관성 급감 → 에이펙스 또렷
       if (vy < 0) vy *= j.releaseDamp;
     }
 
-    // 속도 한계
     const softCapUp = Phaser.Math.Linear(-220, j.maxVyUp, this.pressHold);
     if (vy < softCapUp) vy = softCapUp;
     vy = Phaser.Math.Clamp(vy, j.maxVyUp, j.maxVyDown);
@@ -907,14 +832,13 @@ export default class GameScene extends Phaser.Scene {
       this.onGameOver();
       return;
     }
-
     this.player.y = Phaser.Math.Clamp(this.player.y, 16, this.scale.height);
 
     // Move left & cleanup
     const moveLeft = (grp) =>
       grp.children.iterate((o) => {
         if (!o) return;
-        if (o.getData?.("isFast")) return; // fast는 자체 속도 유지
+        if (o.getData?.("isFast")) return;
         o.body.setVelocityX(-this.speed);
         o.body.setVelocityY(0);
         if (o.x < -220) o.destroy();
@@ -923,17 +847,15 @@ export default class GameScene extends Phaser.Scene {
     moveLeft(this.grpPillars);
     moveLeft(this.grpCoins);
 
-    // ===== Intro 상태 체크 =====
+    // Intro 상태 체크
     if (this.isIntro && this.isIntroTextPassed()) {
-      this.isIntro = false; // 텍스트가 완전히 지나가면 인트로 종료
+      this.isIntro = false;
     }
 
-    // ===== Distance-based spawning =====
-    // 이번 프레임 이동거리(px)
-    const dx = this.speed * dt;
-    this.distSinceSet += dx;
+    // Distance-based spawning
+    const dtPx = this.speed * dt;
+    this.distSinceSet += dtPx;
 
-    // 인트로가 끝나고 텍스트가 완전히 지나간 후에만 세트 스폰
     if (
       !this.isIntro &&
       this.isIntroTextPassed() &&
@@ -944,17 +866,16 @@ export default class GameScene extends Phaser.Scene {
       this.lastSetAt = this.time.now;
 
       this.distSinceSet = 0;
-      this.gapCoinSpawned = false; // 새 세트가 스폰되면 gap 코인 리셋
+      this.gapCoinSpawned = false;
       let base = this.rand(this.rules.setDistMin, this.rules.setDistMax);
       if (this.pendingTailPad > 0) {
         base += this.pendingTailPad;
         this.pendingTailPad = 0;
       }
       this.nextSetDist = base;
-      this.gapCoinDistance = this.nextSetDist * 0.5; // gap 중간 지점
+      this.gapCoinDistance = this.nextSetDist * 0.5;
     }
 
-    // Gap 중간 지점에서 코인 스폰
     if (
       !this.isIntro &&
       this.isIntroTextPassed() &&

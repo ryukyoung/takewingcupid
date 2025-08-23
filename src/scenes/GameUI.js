@@ -123,41 +123,12 @@ export default class GameUI {
   updateScore(newScore) {
     this.score = newScore;
     this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
-
-    // 점수 증가 애니메이션
-    this.scene.tweens.add({
-      targets: this.scoreText,
-      scaleX: 1.1,
-      scaleY: 1.1,
-      duration: 100,
-      yoyo: true,
-      ease: "Back.easeOut",
-    });
   }
 
   // 코인 개수 업데이트
   updateCoinCount(newCount) {
     this.coinCount = newCount;
     this.coinText.setText(`× ${this.coinCount}`);
-
-    // 코인 수집 애니메이션
-    this.scene.tweens.add({
-      targets: [this.coinIcon, this.coinText],
-      scaleX: 1.3,
-      scaleY: 1.3,
-      duration: 150,
-      yoyo: true,
-      ease: "Back.easeOut",
-    });
-
-    // 코인 아이콘 반짝임
-    this.scene.tweens.add({
-      targets: this.coinIcon,
-      alpha: 0.7,
-      duration: 100,
-      yoyo: true,
-      repeat: 1,
-    });
   }
 
   // 캐릭터 변경 (필요시)
