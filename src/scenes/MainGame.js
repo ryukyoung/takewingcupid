@@ -141,7 +141,7 @@ export default class GameScene extends Phaser.Scene {
     this.load.audio("coinsound", "assets/audio/coinsound.wav");
 
     // 🔊 BGM 추가 (무한 루프)
-    this.load.audio("gamebgm", "assets/audio/gamebgm.wav");
+    this.load.audio("gamebgm", "assets/audio/gamebgm.mp3");
   }
 
   create() {
