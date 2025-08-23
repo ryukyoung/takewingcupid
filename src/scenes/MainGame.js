@@ -266,7 +266,7 @@ export default class GameScene extends Phaser.Scene {
     // === Speed / difficulty (타이머 + 점수 기반) ===
     this.baseSpeed = 200; // 시작 속도
     this.speed = this.baseSpeed; // 현재 실제 속도
-    this.speedMax = 460; // 상한
+    this.speedMax = 360; // 상한
     this.targetSpeed = this.speed; // 목표 속도(여기에 수렴)
     this.speedLerp = 0.08; // 수렴 속도(0~1)
 
@@ -275,11 +275,11 @@ export default class GameScene extends Phaser.Scene {
 
     // 보너스 합산 (완만하게 조정)
     this.timerBonus = 0;
-    this.speedStep = 40; // 🔧 100 → 40 (상승 폭 감소)
+    this.speedStep = 20; // 🔧 100 → 20 (상승 폭 감소)
 
     // ⏱ 타이머 보너스: 주기 느리게
     this.time.addEvent({
-      delay: 9000, // 🔧 5000ms → 9000ms (더 천천히 빨라짐)
+      delay: 10000, // 🔧 5000ms → 10000ms (더 천천히 빨라짐)
       loop: true,
       callback: () => {
         this.timerBonus = Math.min(
@@ -846,7 +846,7 @@ export default class GameScene extends Phaser.Scene {
     bottom.setImmovable(true);
     bottom.body.setAllowGravity(false);
     bottom.setOrigin(0.5, 1.0).setScale(4.0, 4.0);
-    bottom.y = this.scale.height - 70;
+    bottom.y = this.scale.height - 55;
     this.normalizeSprite(bottom, {
       scaleX: bottom.scaleX,
       scaleY: bottom.scaleY,
@@ -867,7 +867,7 @@ export default class GameScene extends Phaser.Scene {
     top.setImmovable(true);
     top.body.setAllowGravity(false);
     top.setOrigin(0.5, 0.0).setScale(4.0, 4.0);
-    top.y = 70;
+    top.y = 55;
     this.normalizeSprite(top, {
       scaleX: top.scaleX,
       scaleY: top.scaleY,

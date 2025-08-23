@@ -64,7 +64,30 @@ export default class GameOver {
     });
 
     // HOME (TitleScene으로)
-    this.homeBtn = makeImgBtn(centerX + 100, baseY + 97, "zzz", () => {
+    this.homeBtn = makeImgBtn(centerX + 100, baseY + 97, "zzz", async () => {
+      // 1) 사용자 제스처 중 오디오 컨텍스트 깨우기 (iOS/Safari 안전)
+      try {
+        await this.scene.sound?.context?.resume?.();
+      } catch (e) {}
+
+      // 2) 타이틀 BGM 확보 후 재생 (이미 playing이면 건너뜀)
+      const key = "xoxzbgm";
+      if (this.scene.cache.audio.exists(key)) {
+        let bgm = this.scene.sound.get(key);
+        if (!bgm) {
+          bgm = this.scene.sound.add(key, { loop: true, volume: 0 });
+        }
+        if (!bgm.isPlaying) {
+          bgm.play();
+          // 부드럽게 페이드인
+          this.scene.tweens.add({ targets: bgm, volume: 0.5, duration: 300 });
+        }
+      } else {
+        // (예외) 캐시에 없으면 TitleScene에서 재생하도록 플래그 남기기
+        this.scene.registry.set("title_bgm_should_start", true);
+      }
+
+      // 3) 화면 전환
       this.hide();
       this.scene.scene.start("TitleScene");
     });
