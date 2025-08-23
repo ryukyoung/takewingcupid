@@ -36,14 +36,7 @@ export default class GameUI {
         fontFamily: "DOSMyungjo",
         color: "#ffffff",
         stroke: "#000000",
-        strokeThickness: 3,
-        shadow: {
-          offsetX: 2,
-          offsetY: 2,
-          color: "#000000",
-          blur: 4,
-          fill: true,
-        },
+        strokeThickness: 2,
       })
       .setOrigin(0, 0)
       .setDepth(1000)
@@ -73,14 +66,7 @@ export default class GameUI {
         fontFamily: "DOSMyungjo",
         color: "#ffffff",
         stroke: "#000000",
-        strokeThickness: 3,
-        shadow: {
-          offsetX: 2,
-          offsetY: 2,
-          color: "#000000",
-          blur: 4,
-          fill: true,
-        },
+        strokeThickness: 2,
       })
       .setOrigin(0, 0)
       .setDepth(1000)
