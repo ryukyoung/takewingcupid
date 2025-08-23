@@ -19,6 +19,7 @@
       :root {
         color-scheme: dark;
       }
+
       /* 기본 스타일 (기존 유지) */
       body {
         margin: 0;
@@ -29,20 +30,24 @@
         margin: auto;
       }
 
-      /* 뷰포트 꽉 채우고 싶으면 아래 주석을 해제해도 됩니다 */
-      /*
-      html, body { height: 100dvh; }
-      canvas { position: fixed; inset: 0; width: 100vw; height: 100dvh; }
-      */
-
-      /* 폰트 (기존 유지) */
+      /* 폰트 (경로 혼용 대응: public/assets/..., src/... 둘 다 시도) */
       @font-face {
-        font-family: "DOSMyungjo";
-        src: url("/src/fonts/DOSMyungjo.ttf");
+        font-family: "DOSMyunjo"; /* 권장 이름 */
+        src: url("/assets/fonts/DOSMyunjo.ttf") format("truetype"),
+          url("/src/fonts/DOSMyunjo.ttf") format("truetype");
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "DOSMyungjo"; /* 오탈자 호환용 별칭 */
+        src: url("/assets/fonts/DOSMyunjo.ttf") format("truetype"),
+          url("/src/fonts/DOSMyunjo.ttf") format("truetype");
+        font-display: swap;
       }
       @font-face {
         font-family: "DOSPilgi";
-        src: url("/src/fonts/DOSPilgi.ttf");
+        src: url("/assets/fonts/DOSPilgi.ttf") format("truetype"),
+          url("/src/fonts/DOSPilgi.ttf") format("truetype");
+        font-display: swap;
       }
 
       /* ===== 전체화면 토글 버튼 ===== */
@@ -82,6 +87,19 @@
         width: 22px;
         height: 22px;
         display: block;
+      }
+
+      /* ==== 의사 풀스크린 fallback ==== */
+      html.fs-fallback,
+      body.fs-fallback {
+        height: 100svh; /* 보이는 영역 기준 세이프 뷰포트 */
+        overflow: hidden;
+      }
+      canvas.fs-fill {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100svh;
       }
     </style>
   </head>
@@ -142,37 +160,74 @@
     <!-- 너의 게임 엔트리 스크립트 -->
     <script type="module" src="/src/main.js"></script>
 
-    <!-- 전체화면 토글 스크립트 -->
+    <!-- 전체화면 토글 스크립트 (사파리 대응 + fallback) -->
     <script>
       const btn = document.getElementById("fsToggle");
       const iconEnter = document.getElementById("iconEnter");
       const iconExit = document.getElementById("iconExit");
 
+      // ===== Fallback(의사 풀스크린) 적용/해제 =====
+      function fallbackOn() {
+        document.documentElement.classList.add("fs-fallback");
+        document.body.classList.add("fs-fallback");
+        const canvas = document.querySelector("canvas");
+        if (canvas) canvas.classList.add("fs-fill");
+        syncBtn();
+      }
+      function fallbackOff() {
+        document.documentElement.classList.remove("fs-fallback");
+        document.body.classList.remove("fs-fallback");
+        const canvas = document.querySelector("canvas");
+        if (canvas) canvas.classList.remove("fs-fill");
+        syncBtn();
+      }
+      function isFallbackOn() {
+        return document.documentElement.classList.contains("fs-fallback");
+      }
+
       function inFs() {
-        return !!(
-          document.fullscreenElement || document.webkitFullscreenElement
+        return (
+          !!(document.fullscreenElement || document.webkitFullscreenElement) ||
+          isFallbackOn()
         );
       }
-      async function enterFs(el = document.documentElement) {
-        const req = el.requestFullscreen || el.webkitRequestFullscreen;
-        if (req) {
-          try {
-            await req.call(el);
-          } catch (e) {
-            console.warn(e);
+
+      async function enterFs() {
+        // iOS 사파리는 캔버스에 직접 요청하는 게 더 잘 먹힘
+        const canvas = document.querySelector("canvas");
+        const el = canvas || document.documentElement;
+
+        try {
+          if (el.requestFullscreen) {
+            await el.requestFullscreen({ navigationUI: "hide" });
+            return;
+          } else if (el.webkitRequestFullscreen) {
+            // webkit prefixed는 옵션 없이 호출
+            await el.webkitRequestFullscreen();
+            return;
           }
+          // 지원 안 하면 fallback
+          fallbackOn();
+        } catch (e) {
+          // 거부/예외 시 fallback
+          fallbackOn();
         }
       }
+
       async function exitFs() {
-        const ex = document.exitFullscreen || document.webkitExitFullscreen;
-        if (ex) {
-          try {
-            await ex.call(document);
-          } catch (e) {
-            console.warn(e);
+        try {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            await document.webkitExitFullscreen();
           }
+        } catch (e) {
+          /* noop */
+        } finally {
+          fallbackOff();
         }
       }
+
       function syncBtn() {
         const on = inFs();
         iconEnter.style.display = on ? "none" : "block";
