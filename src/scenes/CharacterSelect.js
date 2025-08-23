@@ -4,24 +4,40 @@ import Phaser from "phaser";
 export default class CharacterSelect extends Phaser.Scene {
   constructor() {
     super({ key: "CharacterSelect" });
-    this.characters = ["char1", "char2", "char3", "char4", "char5", "char6"];
-    this.currentIndex = 0;
-    this.isAnimating = false;
 
+    this.characters = [
+      "License1",
+      "License2",
+      "License3",
+      "License4",
+      "License5",
+      "License6",
+    ];
+
+    // UI scales / timings
     this.SIDE_SCALE = 0.3;
     this.CENTER_SCALE = 0.4;
     this.SHADE_ALPHA = 0.4;
     this.DUR = 320;
 
-    this._selectLocked = false; // Select 중복 방지 락
+    // 런타임 상태
+    this.currentIndex = 0;
+    this.isAnimating = false;
+    this._selectLocked = false;
+  }
+
+  // 씬에 들어올 때마다 깔끔히 리셋
+  init() {
+    this.currentIndex = 0;
+    this.isAnimating = false;
+    this._selectLocked = false;
   }
 
   preload() {
     for (let i = 1; i <= 6; i++) {
-      this.load.image(`char${i}`, `assets/images/License${i}.png`);
+      this.load.image(`License${i}`, `assets/images/License${i}.png`);
     }
     this.load.image("cs_bg", "assets/images/cs_bg.png");
-    this.load.image("backBtn", "assets/images/backBtn.png");
   }
 
   create() {
@@ -29,46 +45,53 @@ export default class CharacterSelect extends Phaser.Scene {
     const centerX = width / 2;
     const centerY = height / 2;
 
-    // === TitleScene에서 재생 중인 BGM 핸들 참조 ===
+    // TitleScene에서 재생 중인 BGM 참조(없어도 무시)
     this.bgm = this.sound.get("xoxzbgm") || null;
 
+    // 배경
     this.add.image(0, 0, "cs_bg").setOrigin(0, 0).setDepth(0);
 
+    // 뒤로가기 텍스트 버튼 "<"
     this.backButton = this.add
-      .image(5, 5, "backBtn")
-      .setOrigin(0.25)
-      .setScale(0.2)
-      .setInteractive({ useHandCursor: true })
+      .text(20, 20, "<", {
+        fontFamily: "DOSmyungjo",
+        fontSize: "40px",
+        color: "#ffffff",
+      })
+      .setOrigin(0, 0)
       .setDepth(10)
+      .setInteractive({ useHandCursor: true });
+
+    this.backButton
       .on("pointerdown", (pointer, lx, ly, event) => {
-        event?.stopPropagation?.(); // 🔸 전파 방지
+        event?.stopPropagation?.();
         if (this._selectLocked) return;
         this.scene.start("TitleScene");
       })
-      .on("pointerover", () =>
+      .on("pointerover", () => {
         this.tweens.add({
           targets: this.backButton,
-          scale: 0.25,
+          alpha: 0.5,
           duration: 120,
           ease: "Back.easeOut",
-        })
-      )
-      .on("pointerout", () =>
+        });
+      })
+      .on("pointerout", () => {
         this.tweens.add({
           targets: this.backButton,
-          scale: 0.2,
+          alpha: 1,
           duration: 120,
           ease: "Back.easeOut",
-        })
-      );
+        });
+      });
 
+    // 캐릭터 3장 배치
     this.positions = {
       left: { x: centerX - 200, y: centerY },
       center: { x: centerX, y: centerY },
       right: { x: centerX + 200, y: centerY },
     };
 
-    // === 스프라이트 3장 ===
     this.leftSprite = this.add
       .sprite(this.positions.left.x, this.positions.left.y, this.getCharKey(-1))
       .setScale(this.SIDE_SCALE);
@@ -87,7 +110,7 @@ export default class CharacterSelect extends Phaser.Scene {
       )
       .setScale(this.SIDE_SCALE);
 
-    // === 그림자 3개 ===
+    // 그림자(사각형)
     this.leftShadow = this.add.rectangle(
       this.leftSprite.x,
       this.leftSprite.y,
@@ -119,81 +142,97 @@ export default class CharacterSelect extends Phaser.Scene {
 
     this.setDepths();
 
+    // 좌/우 화살표
     this.createArrowButtons(centerX, centerY);
 
+    // 화면 아무 곳 클릭으로도 좌/우 슬라이드
     this.input.on("pointerdown", this.handleInput, this);
 
-    const TitleText = this.add
+    // 타이틀
+    const titleText = this.add
       .text(centerX, 40, "Character Select", {
         fontFamily: "DOSmyungjo",
         fontSize: "36px",
-        color: "white",
+        color: "#ffffff",
       })
       .setOrigin(0.5);
 
-    const selectText = this.add
+    // 선택 버튼
+    this.selectText = this.add
       .text(centerX, height - 50, "Select", {
         fontFamily: "DOSmyungjo",
         fontSize: "28px",
-        color: "white",
+        color: "#ffffff",
       })
       .setOrigin(0.5)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
-    // === Select hover 효과
+    this.selectText
+      .on("pointerover", () => {
+        this.tweens.add({
+          targets: this.selectText,
+          alpha: 0.5,
+          duration: 120,
+          ease: "Quad.easeOut",
+        });
+      })
+      .on("pointerout", () => {
+        this.tweens.add({
+          targets: this.selectText,
+          alpha: 1.0,
+          duration: 120,
+          ease: "Quad.easeOut",
+        });
+      })
+      .on("pointerdown", (pointer, lx, ly, event) => {
+        event?.stopPropagation?.();
+        if (this._selectLocked) return;
+        this._selectLocked = true;
+
+        // 선택된 캐릭터 저장
+        this.registry.set("selectedCharacter", this.currentIndex + 1);
+
+        // BGM 페이드아웃 후 GameScene 전환
+        if (this.bgm?.isPlaying) {
+          this.tweens.add({
+            targets: this.bgm,
+            volume: 0,
+            duration: 400,
+            onComplete: () => {
+              this.bgm.stop();
+              this.bgm.setVolume(0.5);
+              this.scene.start("GameScene");
+            },
+          });
+        } else {
+          this.scene.start("GameScene");
+        }
+      });
+
+    // 타이틀 밑 라인
     const line = this.add.graphics();
     line.lineStyle(2, 0xffffff, 1);
     line.beginPath();
-    const lineWidth = TitleText.width * 1.1;
-    const startX = TitleText.x - lineWidth / 2 - 1;
-    const endX = TitleText.x + lineWidth / 2;
-    const y = TitleText.y + TitleText.height / 2 - 3;
+    const lineWidth = titleText.width * 1.1;
+    const startX = titleText.x - lineWidth / 2 - 1;
+    const endX = titleText.x + lineWidth / 2;
+    const y = titleText.y + titleText.height / 2 - 3;
     line.moveTo(startX, y);
     line.lineTo(endX, y);
     line.strokePath();
 
-    selectText.setAlpha(1);
-    line.setAlpha(1);
-    selectText.on("pointerover", () => {
-      this.tweens.add({
-        targets: selectText,
-        alpha: 0.5,
-        duration: 120,
-        ease: "Quad.easeOut",
-      });
-    });
-    selectText.on("pointerout", () => {
-      this.tweens.add({
-        targets: selectText,
-        alpha: 1.0,
-        duration: 120,
-        ease: "Quad.easeOut",
-      });
+    // 정리 루틴(씬 떠날 때 리스너 해제)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.input.off("pointerdown", this.handleInput, this);
+      this.leftArrow?.removeAllListeners();
+      this.rightArrow?.removeAllListeners();
+      this.backButton?.removeAllListeners();
+      this.selectText?.removeAllListeners();
     });
 
-    // === ✅ Select 클릭 시: BGM 페이드아웃 → 정지 → GameScene 전환 ===
-    selectText.on("pointerdown", (pointer, lx, ly, event) => {
-      event?.stopPropagation?.();
-      if (this._selectLocked) return;
-      this._selectLocked = true;
-      this.input.enabled = false;
-
-      this.registry.set("selectedCharacter", this.currentIndex + 1);
-
-      if (this.bgm?.isPlaying) {
-        this.tweens.add({
-          targets: this.bgm,
-          volume: 0,
-          duration: 400,
-          onComplete: () => {
-            this.bgm.stop();
-            this.bgm.setVolume(0.5); // 다음에 다시 사용할 대비
-            this.scene.start("GameScene");
-          },
-        });
-      } else {
-        this.scene.start("GameScene");
-      }
+    // (선택) sleep/wake를 쓰는 경우: 깨우면 자동 새로고침
+    this.events.on(Phaser.Scenes.Events.WAKE, () => {
+      this.scene.restart();
     });
   }
 
@@ -216,9 +255,11 @@ export default class CharacterSelect extends Phaser.Scene {
       )
       .setAngle(180)
       .setDepth(5)
-      .setInteractive({ useHandCursor: true })
+      .setInteractive({ useHandCursor: true });
+
+    this.leftArrow
       .on("pointerdown", () => {
-        if (!this.isAnimating) this.slide(-1);
+        if (!this.isAnimating && !this._selectLocked) this.slide(-1);
       })
       .on("pointerover", () => {
         this.leftArrow.setAlpha(1);
@@ -256,9 +297,11 @@ export default class CharacterSelect extends Phaser.Scene {
       )
       .setAngle(180)
       .setDepth(5)
-      .setInteractive({ useHandCursor: true })
+      .setInteractive({ useHandCursor: true });
+
+    this.rightArrow
       .on("pointerdown", () => {
-        if (!this.isAnimating) this.slide(1);
+        if (!this.isAnimating && !this._selectLocked) this.slide(1);
       })
       .on("pointerover", () => {
         this.rightArrow.setAlpha(1);
@@ -289,12 +332,12 @@ export default class CharacterSelect extends Phaser.Scene {
   }
 
   setDepths() {
-    this.leftSprite.setScale(0.3).setDepth(1);
-    this.centerSprite.setScale(0.4).setDepth(3);
-    this.rightSprite.setScale(0.3).setDepth(1);
+    this.leftSprite.setScale(this.SIDE_SCALE).setDepth(1);
+    this.centerSprite.setScale(this.CENTER_SCALE).setDepth(3);
+    this.rightSprite.setScale(this.SIDE_SCALE).setDepth(1);
 
-    this.leftShadow.setScale(0.3).setDepth(2);
-    this.rightShadow.setScale(0.3).setDepth(2);
+    this.leftShadow.setScale(this.SIDE_SCALE).setDepth(2);
+    this.rightShadow.setScale(this.SIDE_SCALE).setDepth(2);
 
     this.leftShadow.setVisible(true);
     this.rightShadow.setVisible(true);
@@ -319,6 +362,7 @@ export default class CharacterSelect extends Phaser.Scene {
     const d = this.DUR;
 
     if (direction > 0) {
+      // 오른쪽으로 슬라이드
       this.rightSprite.setDepth(3);
       this.centerSprite.setDepth(1);
 
@@ -404,6 +448,7 @@ export default class CharacterSelect extends Phaser.Scene {
         },
       });
     } else {
+      // 왼쪽으로 슬라이드
       this.leftSprite.setDepth(3);
       this.centerSprite.setDepth(1);
 

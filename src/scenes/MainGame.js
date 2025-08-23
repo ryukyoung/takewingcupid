@@ -118,7 +118,8 @@ export default class GameScene extends Phaser.Scene {
   // ===== Phaser =====
   preload() {
     const charIndex = this.registry.get("selectedCharacter") || 1;
-    this.load.image("player", `assets/images/char${charIndex}.png`);
+    this.selectedCharKey = `char${charIndex}`;
+    this.load.image(this.selectedCharKey, `assets/images/char${charIndex}.png`);
     this.load.image(
       `characterBar${charIndex}`,
       `assets/images/characterBar${charIndex}.png`
@@ -180,8 +181,11 @@ export default class GameScene extends Phaser.Scene {
     this.textures.get("bg_near")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     // Player
-    this.player = this.physics.add.sprite(150, H / 2, "player");
-    this.textures.get("player")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    // Player 생성
+    this.player = this.physics.add.sprite(150, H / 2, this.selectedCharKey);
+    this.textures
+      .get(this.selectedCharKey)
+      ?.setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.normalizeSprite(this.player, {
       scaleX: 1.4,
       scaleY: 1.4,
