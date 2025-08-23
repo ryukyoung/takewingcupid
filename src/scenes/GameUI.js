@@ -7,9 +7,11 @@ export default class GameUI {
 
     // UI 요소들
     this.scoreText = null;
+    this.scoreLabel = null;
     this.coinText = null;
-    this.characterImage = null;
     this.coinIcon = null;
+    this.coinXIcon = null;
+    this.characterImage = null;
 
     this.init();
   }
@@ -19,8 +21,17 @@ export default class GameUI {
     const selectedCharacter = this.scene.registry.get("selectedCharacter") || 1;
 
     // === Score (왼쪽 위) ===
+    // "Score:" 대신 이미지
+    this.scoreLabel = this.scene.add
+      .image(30, 35, "uiscore") // ← preload에서 this.load.image("uiscore", "assets/images/uiscore.png")
+      .setOrigin(0, 0.5)
+      .setScale(1.0)
+      .setDepth(1000)
+      .setScrollFactor(0);
+
+    // 점수 숫자 텍스트 (이미지 옆에 표시)
     this.scoreText = this.scene.add
-      .text(30, 20, "Score: 0", {
+      .text(this.scoreLabel.x + this.scoreLabel.displayWidth + 10, 20, "0", {
         fontSize: "24px",
         fontFamily: "DOSMyungjo",
         color: "#ffffff",
@@ -41,15 +52,23 @@ export default class GameUI {
     // === Coin Count (오른쪽 위) ===
     // 코인 아이콘
     this.coinIcon = this.scene.add
-      .image(width - 100, 35, "coin")
+      .image(width - 140, 35, "coin")
       .setOrigin(0.5, 0.5)
       .setScale(1.0)
       .setDepth(1000)
       .setScrollFactor(0);
 
-    // 코인 개수 텍스트
+    // "x" 텍스트 대신 이미지
+    this.coinXIcon = this.scene.add
+      .image(width - 100, 36, "x") // ← preload에서 this.load.image("x", "assets/images/x.png")
+      .setOrigin(0.5, 0.5)
+      .setScale(1.0)
+      .setDepth(1000)
+      .setScrollFactor(0);
+
+    // 코인 개수 텍스트 (x.png 오른쪽에 숫자)
     this.coinText = this.scene.add
-      .text(width - 80, 20, "×0", {
+      .text(width - 80, 20, "0", {
         fontSize: "24px",
         fontFamily: "DOSMyungjo",
         color: "#ffffff",
@@ -82,13 +101,13 @@ export default class GameUI {
   // 점수 업데이트
   updateScore(newScore) {
     this.score = newScore;
-    this.scoreText.setText(`Score: ${this.score.toLocaleString()}`);
+    this.scoreText.setText(this.score.toLocaleString());
   }
 
   // 코인 개수 업데이트
   updateCoinCount(newCount) {
     this.coinCount = newCount;
-    this.coinText.setText(`× ${this.coinCount}`);
+    this.coinText.setText(this.coinCount);
   }
 
   // 리사이즈 처리
@@ -97,7 +116,10 @@ export default class GameUI {
 
     // 코인 UI 위치 업데이트 (오른쪽 위 고정)
     if (this.coinIcon) {
-      this.coinIcon.setPosition(width - 100, 35);
+      this.coinIcon.setPosition(width - 140, 35);
+    }
+    if (this.coinXIcon) {
+      this.coinXIcon.setPosition(width - 100, 36);
     }
     if (this.coinText) {
       this.coinText.setPosition(width - 80, 20);
@@ -111,9 +133,11 @@ export default class GameUI {
 
   // UI 요소들 표시/숨김
   setVisible(visible) {
+    if (this.scoreLabel) this.scoreLabel.setVisible(visible);
     if (this.scoreText) this.scoreText.setVisible(visible);
-    if (this.coinText) this.coinText.setVisible(visible);
     if (this.coinIcon) this.coinIcon.setVisible(visible);
+    if (this.coinXIcon) this.coinXIcon.setVisible(visible);
+    if (this.coinText) this.coinText.setVisible(visible);
     if (this.characterImage) this.characterImage.setVisible(visible);
     if (this.characterBorder) this.characterBorder.setVisible(visible);
   }
@@ -122,9 +146,11 @@ export default class GameUI {
   destroy() {
     this.scene.scale.off("resize", this.onResize, this);
 
+    if (this.scoreLabel) this.scoreLabel.destroy();
     if (this.scoreText) this.scoreText.destroy();
-    if (this.coinText) this.coinText.destroy();
     if (this.coinIcon) this.coinIcon.destroy();
+    if (this.coinXIcon) this.coinXIcon.destroy();
+    if (this.coinText) this.coinText.destroy();
     if (this.characterImage) this.characterImage.destroy();
     if (this.characterBorder) this.characterBorder.destroy();
   }

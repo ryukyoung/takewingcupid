@@ -132,14 +132,16 @@ export default class GameScene extends Phaser.Scene {
     this.load.image("coin", "assets/images/coin.png");
     this.load.image("obs_pillar", "assets/images/obs_pillar.png");
     this.textures.get("coin")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
-    // scene.preload() 어딘가에서
     this.load.image("gameover", "assets/images/gameover.png");
     this.load.image("retry", "assets/images/retry.png");
     this.load.image("zzz", "assets/images/zzz.png");
+    this.load.image("overscore", "assets/images/overscore.png");
     this.load.image("share", "assets/images/share.png");
+    this.load.image("uiscore", "assets/images/uiscore.png");
+    this.load.image("x","assets/images/x.png");
     this.load.audio("diesound", "assets/audio/diesound.wav");
     this.load.audio("coinsound", "assets/audio/coinsound.wav");
-
+    
     // 🔊 BGM 추가 (무한 루프)
     this.load.audio("gamebgm1", "assets/audio/gamebgm1.mp3");
     this.load.audio("gamebgm2", "assets/audio/gamebgm2.mp3");

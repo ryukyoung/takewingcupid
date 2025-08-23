@@ -99,6 +99,32 @@ export default class GameOver {
 
     // === 반응형 ===
     this.scene.scale.on("resize", this.onResize, this);
+
+    // === SCORE 표시 (레이블 이미지 + 숫자 텍스트) ===
+    // 레이블(“SCORE” 글자 이미지를 쓸 예정)
+    this.scoreLabel = this.scene.add
+      .image(0, 0, "overscore") // <- 프리로드된 이미지 키 사용
+      .setDepth(this.depth + 1)
+      .setOrigin(0.5, 1) // 아래쪽 정렬(숫자랑 딱 붙게)
+      .setVisible(false)
+      .setScale(0.9);
+
+    // 점수 숫자
+    this.scoreText = this.scene.add
+      .text(0, 0, "0", {
+        fontFamily: "DOSMyungjo", // 너가 쓰는 폰트로 변경 가능
+        fontSize: "20px",
+        color: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 2,
+        align: "center",
+      })
+      .setDepth(this.depth + 1)
+      .setOrigin(0.5, 0) // 위쪽 정렬(레이블 바로 아래에 붙음)
+      .setVisible(false);
+
+    // 한 번 위치 잡아두기
+    this.layoutScoreUI();
   }
 
   // 화면 꽉 채우기(CSS background-size: cover 처럼)
@@ -124,6 +150,7 @@ export default class GameOver {
     this.retryBtn.setPosition(centerX - 100, baseY + 97);
     this.homeBtn.setPosition(centerX + 100, baseY + 97);
     this.shareBtn.setPosition(width - 85, height - 55);
+    this.layoutScoreUI();
   }
 
   // 점수와 함께 보여주기
@@ -142,6 +169,11 @@ export default class GameOver {
     this.retryBtn.setVisible(true);
     this.homeBtn.setVisible(true);
     this.shareBtn.setVisible(true);
+    // 숫자 갱신 + 보이기
+    this.scoreText.setText((this.latestScore ?? 0).toLocaleString());
+    this.scoreLabel.setVisible(true);
+    this.scoreText.setVisible(true);
+    this.layoutScoreUI();
   }
 
   hide() {
@@ -152,6 +184,8 @@ export default class GameOver {
     this.retryBtn.setVisible(false);
     this.homeBtn.setVisible(false);
     this.shareBtn.setVisible(false);
+    this.scoreLabel.setVisible(false);
+    this.scoreText.setVisible(false);
   }
 
   // ✅ 텍스트만 공유: 트윗 작성창 열기 (이미지/캡처 없음)
@@ -163,5 +197,31 @@ www.takewingcupid.vercel.app`;
       text
     )}`;
     window.open(composeUrl, "_blank", "noopener");
+  }
+
+  layoutScoreUI() {
+    if (!this.shareBtn || !this.scoreLabel || !this.scoreText) return;
+
+    // "공유 버튼 바로 위"에 붙여 놓기
+    const x = this.shareBtn.x;
+    // 레이블을 공유버튼 위로 띄우고(여백 24px)
+    const labelBottomY = this.shareBtn.y - 75;
+
+    // 레이블 실제 높이를 고려해서 숫자를 딱 아래에 붙인다
+    const labelScale = 0.9; // 필요하면 사이즈 조절
+    this.scoreLabel.setScale(labelScale);
+
+    // 레이블의 bottom이 labelBottomY가 되도록 배치
+    this.scoreLabel.setPosition(x, labelBottomY);
+
+    // 숫자는 레이블 아래쪽(아래로 6px 여백)
+    const spacing = 4;
+    const scoreY = labelBottomY + spacing;
+    this.scoreText.setPosition(x, scoreY);
+
+    // 화면이 좁을 땐 숫자 텍스트만 살짝 축소
+    const w = this.scene.scale.width;
+    const textScale = w < 600 ? 0.85 : 1.0;
+    this.scoreText.setScale(textScale);
   }
 }

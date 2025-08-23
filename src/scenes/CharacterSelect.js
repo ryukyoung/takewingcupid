@@ -41,7 +41,7 @@ export default class CharacterSelect extends Phaser.Scene {
     }
     this.load.image("cs_bg", "assets/images/cs_bg.png");
     this.load.image("cs", "assets/images/cs.png"); // 타이틀 이미지
-    this.load.image("selectBtn", "assets/images/select.png"); // 선택 버튼 이미지
+    this.load.image("selectBtn", "assets/images/takewing.png"); // 선택 버튼 이미지
   }
 
   create() {
