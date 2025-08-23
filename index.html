@@ -4,14 +4,13 @@
     <meta charset="UTF-8" />
     <title>Take Wing, CUPID!</title>
 
-    <!-- 모바일 툴바/노치 대응 -->
+    <!-- 모바일 주소창/노치 대응 -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
 
     <style>
-      /* 폰트 (그대로 유지) */
       @font-face {
         font-family: "DOSMyunjo";
         src: url("/src/fonts/DOSMyunjo.ttf");
@@ -26,27 +25,22 @@
         margin: 0;
         height: 100%;
         background: #000;
-        overflow: hidden; /* 주소창 숨김 스크롤 방지 */
+        overflow: hidden;
         -webkit-touch-callout: none;
         -webkit-user-select: none;
         user-select: none;
       }
 
-      /* 게임을 담는 래퍼 */
+      /* 게임 래퍼: 실제 보이는 높이에 맞춤 */
       #game {
         position: fixed;
         inset: 0;
-        /* 최신 브라우저: 동적 뷰포트 단위 */
         height: 100svh;
-        /* iOS 16+ 등: */
         height: 100dvh;
-        /* 구형 대응: JS로 계산한 --vh 변수 사용 */
         height: calc(var(--vh, 1vh) * 100);
         display: flex;
         align-items: center;
         justify-content: center;
-
-        /* 노치/홈 인디케이터 안전 영역 */
         padding-bottom: env(safe-area-inset-bottom);
         padding-top: env(safe-area-inset-top);
       }
@@ -54,19 +48,23 @@
       canvas {
         display: block;
         margin: 0 auto;
-        /* 화면을 넘지 않도록 최대치 제한 */
         max-width: 100vw;
         max-height: 100svh;
         max-height: 100dvh;
         max-height: calc(var(--vh, 1vh) * 100);
-        /* 픽셀 아트면 더 선명하게 */
         image-rendering: pixelated;
-        touch-action: none; /* 두손가락 제스처로 줌 방지 */
+
+        /* 롱프레스/제스처로 인한 pointercancel 방지 */
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+        pointer-events: auto;
       }
     </style>
 
     <script>
-      // 실제 보이는 높이 기준으로 --vh 세팅 (주소창 열림/닫힘에 따라 갱신)
+      // 실제 보이는 높이 기준 --vh 설정 (주소창 변동 대응)
       function setVh() {
         const h = (window.visualViewport?.height || window.innerHeight) * 0.01;
         document.documentElement.style.setProperty("--vh", `${h}px`);
@@ -79,12 +77,10 @@
       });
     </script>
   </head>
-
   <body>
     <!-- Phaser가 붙을 래퍼 -->
     <div id="game"></div>
 
-    <!-- 모듈 스크립트는 그대로 -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
