@@ -31,7 +31,7 @@ export default class GameUI {
 
     // 점수 숫자 텍스트 (이미지 옆에 표시)
     this.scoreText = this.scene.add
-      .text(this.scoreLabel.x + this.scoreLabel.displayWidth + 10, 20, "0", {
+      .text(this.scoreLabel.x + this.scoreLabel.displayWidth + 10, 21, "0", {
         fontSize: "24px",
         fontFamily: "DOSMyungjo",
         color: "#ffffff",
@@ -45,7 +45,7 @@ export default class GameUI {
     // === Coin Count (오른쪽 위) ===
     // 코인 아이콘
     this.coinIcon = this.scene.add
-      .image(width - 140, 35, "coin")
+      .image(width - 115, 38, "coin")
       .setOrigin(0.5, 0.5)
       .setScale(1.0)
       .setDepth(1000)
@@ -53,7 +53,7 @@ export default class GameUI {
 
     // "x" 텍스트 대신 이미지
     this.coinXIcon = this.scene.add
-      .image(width - 100, 36, "x") // ← preload에서 this.load.image("x", "assets/images/x.png")
+      .image(width - 75, 36, "x") // ← preload에서 this.load.image("x", "assets/images/x.png")
       .setOrigin(0.5, 0.5)
       .setScale(1.0)
       .setDepth(1000)
@@ -61,7 +61,7 @@ export default class GameUI {
 
     // 코인 개수 텍스트 (x.png 오른쪽에 숫자)
     this.coinText = this.scene.add
-      .text(width - 80, 20, "0", {
+      .text(width - 55, 21, "0", {
         fontSize: "24px",
         fontFamily: "DOSMyungjo",
         color: "#ffffff",
@@ -102,13 +102,13 @@ export default class GameUI {
 
     // 코인 UI 위치 업데이트 (오른쪽 위 고정)
     if (this.coinIcon) {
-      this.coinIcon.setPosition(width - 140, 35);
+      this.coinIcon.setPosition(width - 115, 38);
     }
     if (this.coinXIcon) {
-      this.coinXIcon.setPosition(width - 100, 36);
+      this.coinXIcon.setPosition(width - 75, 36);
     }
     if (this.coinText) {
-      this.coinText.setPosition(width - 80, 20);
+      this.coinText.setPosition(width - 65, 21);
     }
 
     // 캐릭터 이미지 위치 업데이트 (왼쪽 아래 고정)
