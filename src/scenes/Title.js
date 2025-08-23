@@ -1,32 +1,39 @@
-// TitleScene.js
+// src/scenes/Title.js
 import Phaser from "phaser";
 
 export default class TitleScene extends Phaser.Scene {
   constructor() {
     super({ key: "TitleScene" });
+    this._bgmEnsured = false;
   }
 
   preload() {
-    this.load.image("background", "assets/images/titlebackground.png");
-    this.load.image("startbutton", "assets/images/startbutton.png");
+    // 기본 타이틀 리소스
+    this.load.image("background", "/assets/images/titlebackground.png");
+    this.load.image("startbutton", "/assets/images/startbutton.png");
 
-    // iOS 호환 위해 mp3를 우선 제공 (mp3 + wav 동시 제공 가능)
+    // xoxzbgm을 Prologue에서 로드했더라도, 새로고침으로 Title부터 시작할 수 있으니 방어적 로드
     if (!this.cache.audio.exists("xoxzbgm")) {
-      this.load.audio("xoxzbgm", [
-        "assets/audio/xoxzbgm.mp3", // ← 가능하면 이 파일 꼭 두세요
-        "assets/audio/xoxzbgm.wav",
-      ]);
+      this.load.audio("xoxzbgm", "/assets/audio/xoxzbgm.wav?v=5");
     }
 
-    // (그대로 유지)
-    this.load.audio("gamebgm", "assets/audio/gamebgm.mp3");
+    // (게임 씬에서 쓸 다른 BGM이면 그대로 둠)
+    if (!this.cache.audio.exists("gamebgm")) {
+      this.load.audio("gamebgm", "/assets/audio/gamebgm.mp3?v=5");
+    }
+
+    this.load.on("loaderror", (file) => {
+      console.error("[AUDIO LOAD ERROR]", file?.key, file?.src);
+    });
   }
 
   create() {
-    // ===== 기존 정리 로직 유지 =====
+    // ===== 하드 리셋: 다른 씬 정리 =====
     this.game.scene.getScenes(true).forEach((s) => {
       if (s.sys.settings.key !== "TitleScene") s.scene.stop();
     });
+
+    // 전역 입력 상태 초기화
     if (this.input && this.input.manager) {
       this.input.manager.enabled = true;
       this.input.enabled = true;
@@ -35,11 +42,12 @@ export default class TitleScene extends Phaser.Scene {
       this.input.mouse?.releasePointerLock?.();
     }
 
+    // ===== UI =====
     const centerX = this.cameras.main.centerX;
     const centerY = this.cameras.main.centerY;
 
     this.sound.pauseOnBlur = false;
-    this.add.image(centerX, centerY, "background").setDepth(0);
+    this.add.image(centerX, centerY, "background").setScale(1.0).setDepth(0);
 
     const startButton = this.add
       .image(centerX, centerY + 140, "startbutton")
@@ -50,38 +58,42 @@ export default class TitleScene extends Phaser.Scene {
     startButton.on("pointerover", () => startButton.setAlpha(0.5));
     startButton.on("pointerout", () => startButton.setAlpha(1));
 
-    // ===== 핵심: iOS에서 터치 콜스택 안에서 즉시 재생 =====
-    const startBGMOnTap = () => {
-      try {
-        const ctx = this.sound.context;
-        // 중요: await/then 쓰지 말 것 (동일 콜스택 유지)
-        if (ctx && ctx.state !== "running") {
-          ctx.resume(); // 동기 호출
-        }
-      } catch (_) {}
+    // ===== 🔊 BGM 보장 =====
+    const ensureBGM = () => {
+      if (this._bgmEnsured) return;
 
       let bgm = this.sound.get("xoxzbgm");
-      if (!bgm && this.cache.audio.exists("xoxzbgm")) {
+      if (!bgm) {
+        if (!this.cache.audio.exists("xoxzbgm")) {
+          console.warn("[AUDIO] cache에 xoxzbgm이 없습니다. preload 확인");
+          return;
+        }
         bgm = this.sound.add("xoxzbgm", { loop: true, volume: 0.5 });
       }
-      if (bgm && !bgm.isPlaying) {
-        bgm.play(); // ← 이 호출이 반드시 사용자 터치 핸들러 내부여야 함
+      if (!bgm.isPlaying) {
+        bgm.play();
       }
+      this._bgmEnsured = true;
     };
 
-    // 화면 아무데나 첫 터치 시 BGM 시작 (iOS 안전)
-    this.input.once("pointerdown", startBGMOnTap);
+    const startFlow = async () => {
+      try {
+        const ctx = this.sound.context;
+        if (ctx && ctx.state !== "running") {
+          await ctx.resume();
+        }
+      } catch (_) {}
+      ensureBGM();
+    };
 
-    // (선택) 디버그용: 삐 소리로 오디오 언락 확인
-    // this.input.once("pointerdown", () => {
-    //   const ctx = this.sound.context;
-    //   const osc = ctx.createOscillator();
-    //   osc.connect(ctx.destination);
-    //   osc.start();
-    //   setTimeout(() => osc.stop(), 150);
-    // });
+    if (this.sound.locked || this.sound.context?.state === "suspended") {
+      this.input.once("pointerdown", () => startFlow());
+      this.sound.once("unlocked", () => startFlow());
+    } else {
+      startFlow();
+    }
 
-    // ===== Start → CharacterSelect =====
+    // ===== Start: CharacterSelect로 =====
     startButton.once("pointerup", () => {
       this.input.topOnly = false;
       this.input.enabled = true;
@@ -90,6 +102,10 @@ export default class TitleScene extends Phaser.Scene {
         if (s.sys.settings.key !== "TitleScene") s.scene.stop();
       });
 
+      // BGM은 유지 (원하면 여기서 stop도 가능)
+      // const bgm = this.sound.get("xoxzbgm"); bgm?.stop();
+
+      // 주의: 실제 씬 key가 "CharacterSelect"인지 확인
       this.scene.start("CharacterSelect");
     });
 

@@ -222,8 +222,6 @@ export default class GameScene extends Phaser.Scene {
 
     // 보너스 합산 (완만하게 조정)
     this.timerBonus = 0;
-    this.scoreBonus = 0;
-    this.scorePerSpeedUp = 2500; // 🔧 1000 → 2500 (점수당 상승 간격 증가)
     this.speedStep = 40; // 🔧 100 → 40 (상승 폭 감소)
 
     // ⏱ 타이머 보너스: 주기 느리게
@@ -236,7 +234,7 @@ export default class GameScene extends Phaser.Scene {
           this.speedMax
         );
         this.targetSpeed = Phaser.Math.Clamp(
-          this.baseSpeed + this.timerBonus + this.scoreBonus,
+          this.baseSpeed + this.timerBonus,
           this.baseSpeed,
           this.speedMax
         );
@@ -258,6 +256,9 @@ export default class GameScene extends Phaser.Scene {
     this.grpFast = this.physics.add.group();
     this.wasPressing = false;
     this.pressHold = 0;
+
+    // pillar 사이에서 fast X
+    this.forbidFastY = null;
 
     // Rules
     this.rules = {
@@ -741,6 +742,41 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  // === Fast Y-guard (pillar gap ban zone) ===
+  setPillarGapForbid(top, bottom, pad = 28) {
+    // top: 위 기둥, bottom: 아래 기둥
+    const topBottomY = top.getBottomCenter().y; // 위 기둥의 아래쪽 끝
+    const bottomTopY = bottom.getTopCenter().y; // 아래 기둥의 위쪽 끝
+
+    // 패딩을 준 금지 구간 저장
+    this.forbidFastY = {
+      yMin: Math.min(topBottomY + pad, bottomTopY - pad),
+      yMax: Math.max(topBottomY + pad, bottomTopY - pad),
+    };
+  }
+
+  pickFastY(minY = 40, maxY = this.scale.height - 40) {
+    const r = this.forbidFastY;
+    if (!r || r.yMin >= r.yMax) return this.rand(minY, maxY);
+
+    // [minY, r.yMin) ∪ (r.yMax, maxY] 중에서 균등 선택
+    const a1 = minY,
+      b1 = Math.max(minY, Math.floor(r.yMin));
+    const a2 = Math.min(maxY, Math.ceil(r.yMax)),
+      b2 = maxY;
+
+    const len1 = Math.max(0, b1 - a1);
+    const len2 = Math.max(0, b2 - a2);
+
+    if (len1 <= 0 && len2 <= 0) return this.rand(minY, maxY);
+    if (len1 > 0 && len2 > 0) {
+      return Math.random() * (len1 + len2) < len1
+        ? this.rand(a1, b1)
+        : this.rand(a2, b2);
+    }
+    return len1 > 0 ? this.rand(a1, b1) : this.rand(a2, b2);
+  }
+
   spawnSet_Pillars(baseX) {
     const H = this.scale.height;
     const passageY = this.rand(140, H - 140);
@@ -793,6 +829,7 @@ export default class GameScene extends Phaser.Scene {
     const passageCenterX = (x1 + x2) / 2;
     const passageCenterY = H / 2;
     this.addRandomGapPattern(passageCenterX, passageCenterY);
+    this.setPillarGapForbid(top, bottom, 28);
   }
 
   // ===== Random set chooser =====
@@ -847,7 +884,7 @@ export default class GameScene extends Phaser.Scene {
   spawnFastOne() {
     const H = this.scale.height,
       startX = this.scale.width + 50,
-      y = this.rand(40, H - 40);
+      y = this.pickFastY(40, H - 40);
     const f = this.grpFast.create(startX, y, "obs_square");
     f.setImmovable(true);
     f.body.setAllowGravity(false);
@@ -878,13 +915,9 @@ export default class GameScene extends Phaser.Scene {
     this.score += n;
     this.gameUI.updateScore(this.score);
 
-    // ✅ 점수 기반 보너스 갱신(완만)
-    const steps = Math.floor(this.score / this.scorePerSpeedUp);
-    this.scoreBonus = steps * this.speedStep;
-
     // ✅ 목표 속도 재계산
     this.targetSpeed = Phaser.Math.Clamp(
-      this.baseSpeed + this.timerBonus + this.scoreBonus,
+      this.baseSpeed + this.timerBonus,
       this.baseSpeed,
       this.speedMax
     );
@@ -958,7 +991,9 @@ export default class GameScene extends Phaser.Scene {
     if (this.isIntro && this.isIntroTextPassed()) {
       this.isIntro = false;
     }
-
+    cleanupOffscreen(this.grpPillars);
+    // 기둥이 더 이상 없으면 금지대역 해제
+    if (this.grpPillars.countActive(true) === 0) this.forbidFastY = null;
     // Distance-based spawning
     const dtPx = this.speed * dt;
     this.distSinceSet += dtPx;

@@ -20,6 +20,9 @@ export default class CharacterSelect extends Phaser.Scene {
     this.SHADE_ALPHA = 0.4;
     this.DUR = 320;
 
+    // ✅ 양쪽 가장자리 터치 허용 폭(px). 숫자만 바꿔서 쉽게 조정!
+    this.EDGE_TAP_WIDTH = 200;
+
     // 런타임 상태
     this.currentIndex = 0;
     this.isAnimating = false;
@@ -146,11 +149,11 @@ export default class CharacterSelect extends Phaser.Scene {
     this.input.on("pointerdown", this.handleInput, this);
 
     // === 타이틀 이미지로 교체 ===
-    this.add.image(centerX, 60, "cs").setOrigin(0.5).setScale(0.8);
+    this.add.image(centerX, 45, "cs").setOrigin(0.5).setScale(0.8);
 
     // === 선택 버튼 이미지로 교체 ===
     this.selectBtn = this.add
-      .image(centerX, height - 60, "selectBtn")
+      .image(centerX, height - 55, "selectBtn")
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
 
@@ -229,7 +232,8 @@ export default class CharacterSelect extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     this.leftArrow
-      .on("pointerdown", () => {
+      .on("pointerdown", (pointer, lx, ly, event) => {
+        event?.stopPropagation?.();
         if (!this.isAnimating && !this._selectLocked) this.slide(-1);
       })
       .on("pointerover", () => {
@@ -271,7 +275,8 @@ export default class CharacterSelect extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     this.rightArrow
-      .on("pointerdown", () => {
+      .on("pointerdown", (pointer, lx, ly, event) => {
+        event?.stopPropagation?.();
         if (!this.isAnimating && !this._selectLocked) this.slide(1);
       })
       .on("pointerover", () => {
@@ -316,10 +321,24 @@ export default class CharacterSelect extends Phaser.Scene {
 
   handleInput(pointer) {
     if (this.isAnimating || this._selectLocked) return;
-    const { x } = pointer;
-    const centerX = this.scale.width / 2;
-    const direction = x < centerX ? -1 : 1;
-    this.slide(direction);
+
+    const x = pointer.x;
+    const w = this.scale.width;
+    const edge = this.EDGE_TAP_WIDTH; // 양끝 터치 허용 폭
+
+    // 왼쪽 가장자리
+    if (x <= edge) {
+      this.slide(-1);
+      return;
+    }
+
+    // 오른쪽 가장자리
+    if (x >= w - edge) {
+      this.slide(1);
+      return;
+    }
+
+    // 가운데는 아무 동작 X
   }
 
   slide(direction) {
