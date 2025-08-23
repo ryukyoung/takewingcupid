@@ -332,10 +332,10 @@ export default class GameScene extends Phaser.Scene {
       coinPadMin: 16,
       pillarGapYMin: 150,
       pillarOffsetX: { min: 50, max: 80 },
-      fastPeriodMs: 7000,
+      fastPeriodMs: 8000,
       fastSpeedRatio: 1.85,
       fastDiagonalProb: 0.3,
-      fastDoubleProb: 0.22,
+      fastDoubleProb: 0.14,
       fastMaxDY: 170,
       fastSafeWindowMs: 800,
       wings: {
