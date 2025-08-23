@@ -9,6 +9,7 @@ export default class TitleScene extends Phaser.Scene {
     this.load.image("background", "assets/images/titlebackground.png");
     this.load.image("startbutton", "assets/images/startbutton.png");
     this.load.audio("xoxzbgm", "assets/audio/xoxzbgm.wav");
+    this.load.audio("gamebgm", "assets/audio/gamebgm.mp3");
   }
 
   create() {
