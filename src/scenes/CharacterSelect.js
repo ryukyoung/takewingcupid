@@ -7,15 +7,21 @@ export default class CharacterSelect extends Phaser.Scene {
     this.characters = ["char1", "char2", "char3", "char4", "char5", "char6"];
     this.currentIndex = 0;
     this.isAnimating = false;
+
+    this.SIDE_SCALE = 0.3;
+    this.CENTER_SCALE = 0.4;
+    this.SHADE_ALPHA = 0.4;
+    this.DUR = 320;
+
+    this._selectLocked = false; // Select 중복 방지 락
   }
 
   preload() {
-    // 캐릭터 이미지
     for (let i = 1; i <= 6; i++) {
       this.load.image(`char${i}`, `assets/images/License${i}.png`);
     }
-    // 배경 이미지
     this.load.image("cs_bg", "assets/images/cs_bg.png");
+    this.load.image("backBtn", "assets/images/backBtn.png");
   }
 
   create() {
@@ -23,12 +29,38 @@ export default class CharacterSelect extends Phaser.Scene {
     const centerX = width / 2;
     const centerY = height / 2;
 
-    // 배경 추가
-    this.bg = this.add
-      .image(0, 0, "cs_bg")
-      .setOrigin(0, 0)
-      .setDepth(0)
-      .setScrollFactor(0);
+    // === TitleScene에서 재생 중인 BGM 핸들 참조 ===
+    this.bgm = this.sound.get("xoxzbgm") || null;
+
+    this.add.image(0, 0, "cs_bg").setOrigin(0, 0).setDepth(0);
+
+    this.backButton = this.add
+      .image(5, 5, "backBtn")
+      .setOrigin(0.25)
+      .setScale(0.2)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(10)
+      .on("pointerdown", (pointer, lx, ly, event) => {
+        event?.stopPropagation?.(); // 🔸 전파 방지
+        if (this._selectLocked) return;
+        this.scene.start("TitleScene");
+      })
+      .on("pointerover", () =>
+        this.tweens.add({
+          targets: this.backButton,
+          scale: 0.25,
+          duration: 120,
+          ease: "Back.easeOut",
+        })
+      )
+      .on("pointerout", () =>
+        this.tweens.add({
+          targets: this.backButton,
+          scale: 0.2,
+          duration: 120,
+          ease: "Back.easeOut",
+        })
+      );
 
     this.positions = {
       left: { x: centerX - 200, y: centerY },
@@ -36,80 +68,153 @@ export default class CharacterSelect extends Phaser.Scene {
       right: { x: centerX + 200, y: centerY },
     };
 
-    // 캐릭터 스프라이트들 생성
-    this.leftSprite = this.add.sprite(
-      this.positions.left.x,
-      this.positions.left.y,
-      this.getCharKey(-1)
-    );
-    this.centerSprite = this.add.sprite(
-      this.positions.center.x,
-      this.positions.center.y,
-      this.getCharKey(0)
-    );
-    this.rightSprite = this.add.sprite(
-      this.positions.right.x,
-      this.positions.right.y,
-      this.getCharKey(1)
-    );
+    // === 스프라이트 3장 ===
+    this.leftSprite = this.add
+      .sprite(this.positions.left.x, this.positions.left.y, this.getCharKey(-1))
+      .setScale(this.SIDE_SCALE);
+    this.centerSprite = this.add
+      .sprite(
+        this.positions.center.x,
+        this.positions.center.y,
+        this.getCharKey(0)
+      )
+      .setScale(this.CENTER_SCALE);
+    this.rightSprite = this.add
+      .sprite(
+        this.positions.right.x,
+        this.positions.right.y,
+        this.getCharKey(1)
+      )
+      .setScale(this.SIDE_SCALE);
 
-    // 사이드 캐릭터용 그림자 오버레이 생성
+    // === 그림자 3개 ===
     this.leftShadow = this.add.rectangle(
-      this.positions.left.x,
-      this.positions.left.y,
+      this.leftSprite.x,
+      this.leftSprite.y,
       this.leftSprite.width,
       this.leftSprite.height,
       0x000000,
-      0.4
+      this.SHADE_ALPHA
+    );
+    this.centerShadow = this.add.rectangle(
+      this.centerSprite.x,
+      this.centerSprite.y,
+      this.centerSprite.width,
+      this.centerSprite.height,
+      0x000000,
+      0
     );
     this.rightShadow = this.add.rectangle(
-      this.positions.right.x,
-      this.positions.right.y,
+      this.rightSprite.x,
+      this.rightSprite.y,
       this.rightSprite.width,
       this.rightSprite.height,
       0x000000,
-      0.4
+      this.SHADE_ALPHA
     );
 
-    // 화살표 버튼 생성
-    this.createArrowButtons(centerX, centerY);
+    this.leftShadow.setScale(this.SIDE_SCALE);
+    this.centerShadow.setScale(this.CENTER_SCALE);
+    this.rightShadow.setScale(this.SIDE_SCALE);
 
-    this.setScalesAndDepths();
+    this.setDepths();
+
+    this.createArrowButtons(centerX, centerY);
 
     this.input.on("pointerdown", this.handleInput, this);
 
-    this.add
-      .text(centerX, height - 50, "선택", {
-        fontSize: "32px",
+    const TitleText = this.add
+      .text(centerX, 40, "Character Select", {
+        fontFamily: "DOSmyungjo",
+        fontSize: "36px",
+        color: "white",
+      })
+      .setOrigin(0.5);
+
+    const selectText = this.add
+      .text(centerX, height - 50, "Select", {
+        fontFamily: "DOSmyungjo",
+        fontSize: "28px",
         color: "white",
       })
       .setOrigin(0.5)
-      .setInteractive()
-      .on("pointerdown", () => {
-        this.registry.set("selectedCharacter", this.currentIndex + 1);
-        this.scene.start("GameScene");
+      .setInteractive();
+
+    // === Select hover 효과
+    const line = this.add.graphics();
+    line.lineStyle(2, 0xffffff, 1);
+    line.beginPath();
+    const lineWidth = TitleText.width * 1.1;
+    const startX = TitleText.x - lineWidth / 2 - 1;
+    const endX = TitleText.x + lineWidth / 2;
+    const y = TitleText.y + TitleText.height / 2 - 3;
+    line.moveTo(startX, y);
+    line.lineTo(endX, y);
+    line.strokePath();
+
+    selectText.setAlpha(1);
+    line.setAlpha(1);
+    selectText.on("pointerover", () => {
+      this.tweens.add({
+        targets: selectText,
+        alpha: 0.5,
+        duration: 120,
+        ease: "Quad.easeOut",
       });
+    });
+    selectText.on("pointerout", () => {
+      this.tweens.add({
+        targets: selectText,
+        alpha: 1.0,
+        duration: 120,
+        ease: "Quad.easeOut",
+      });
+    });
+
+    // === ✅ Select 클릭 시: BGM 페이드아웃 → 정지 → GameScene 전환 ===
+    selectText.on("pointerdown", (pointer, lx, ly, event) => {
+      event?.stopPropagation?.();
+      if (this._selectLocked) return;
+      this._selectLocked = true;
+      this.input.enabled = false;
+
+      this.registry.set("selectedCharacter", this.currentIndex + 1);
+
+      if (this.bgm?.isPlaying) {
+        this.tweens.add({
+          targets: this.bgm,
+          volume: 0,
+          duration: 400,
+          onComplete: () => {
+            this.bgm.stop();
+            this.bgm.setVolume(0.5); // 다음에 다시 사용할 대비
+            this.scene.start("GameScene");
+          },
+        });
+      } else {
+        this.scene.start("GameScene");
+      }
+    });
   }
 
   createArrowButtons(centerX, centerY) {
     const arrowSize = 26;
     const arrowOffset = 375;
 
-    // 왼쪽 화살표 (◀) - 회전으로 방향 반전
     this.leftArrow = this.add
       .triangle(
         centerX - arrowOffset,
         centerY,
         0,
-        -arrowSize / 2, // 위쪽 점
+        -arrowSize / 2,
         arrowSize,
-        0, // 오른쪽 점
         0,
-        arrowSize / 2, // 아래쪽 점
+        0,
+        arrowSize / 2,
         0xffffff,
         0.8
       )
-      .setAngle(180) // ★ 여기만 추가됨 (좌우 반전)
+      .setAngle(180)
       .setDepth(5)
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", () => {
@@ -136,17 +241,16 @@ export default class CharacterSelect extends Phaser.Scene {
         });
       });
 
-    // 오른쪽 화살표 (▶)
     this.rightArrow = this.add
       .triangle(
         centerX + arrowOffset,
         centerY,
         arrowSize,
-        -arrowSize / 2, // 위쪽 점
+        -arrowSize / 2,
         arrowSize,
-        arrowSize / 2, // 아래쪽 점
+        arrowSize / 2,
         0,
-        0, // 왼쪽 점
+        0,
         0xffffff,
         0.8
       )
@@ -184,30 +288,20 @@ export default class CharacterSelect extends Phaser.Scene {
     return this.characters[idx];
   }
 
-  setScalesAndDepths() {
-    // 화질 보존을 위해 더 큰 스케일 사용
+  setDepths() {
     this.leftSprite.setScale(0.3).setDepth(1);
-    this.centerSprite.setScale(0.4).setDepth(3); // 가장 앞에
+    this.centerSprite.setScale(0.4).setDepth(3);
     this.rightSprite.setScale(0.3).setDepth(1);
 
-    // 그림자 크기도 조정
-    this.leftShadow.setScale(0.3).setDepth(2); // 스프라이트 위에
+    this.leftShadow.setScale(0.3).setDepth(2);
     this.rightShadow.setScale(0.3).setDepth(2);
 
-    // 중앙 캐릭터는 그림자 없음 (밝게)
     this.leftShadow.setVisible(true);
     this.rightShadow.setVisible(true);
   }
 
-  updateShadowSize(sprite, shadow) {
-    // 스프라이트 크기에 맞게 그림자 크기 조정
-    const bounds = sprite.getBounds();
-    shadow.setSize(bounds.width, bounds.height);
-    shadow.setPosition(sprite.x, sprite.y);
-  }
-
   handleInput(pointer) {
-    if (this.isAnimating) return;
+    if (this.isAnimating || this._selectLocked) return;
     const { x } = pointer;
     const centerX = this.scale.width / 2;
     const direction = x < centerX ? -1 : 1;
@@ -215,212 +309,182 @@ export default class CharacterSelect extends Phaser.Scene {
   }
 
   slide(direction) {
+    if (this.isAnimating) return;
     this.isAnimating = true;
+
     this.currentIndex =
       (this.currentIndex + direction + this.characters.length) %
       this.characters.length;
 
-    const moveDuration = 300;
+    const d = this.DUR;
 
     if (direction > 0) {
-      // 오른쪽으로 슬라이드
-      this.leftSprite.setDepth(1);
-      this.centerSprite.setDepth(1);
       this.rightSprite.setDepth(3);
+      this.centerSprite.setDepth(1);
 
-      // 왼쪽 스프라이트와 그림자 페이드아웃
       this.tweens.add({
         targets: [this.leftSprite, this.leftShadow],
         x: this.positions.left.x - 150,
         alpha: 0,
-        duration: moveDuration,
+        duration: d,
         onComplete: () => {
           this.leftSprite.destroy();
           this.leftShadow.destroy();
         },
       });
 
-      // 중앙 -> 왼쪽으로 이동 & 그림자 생성
-      const centerToLeftShadow = this.add
-        .rectangle(
-          this.positions.center.x,
-          this.positions.center.y,
-          this.centerSprite.width,
-          this.centerSprite.height,
-          0x000000,
-          0
-        )
-        .setScale(0.4)
-        .setDepth(2);
-
       this.tweens.add({
-        targets: this.centerSprite,
+        targets: [this.centerSprite, this.centerShadow],
         x: this.positions.left.x,
-        scale: 0.3,
+        scale: this.SIDE_SCALE,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
+      });
+      this.tweens.add({
+        targets: this.centerShadow,
+        alpha: this.SHADE_ALPHA,
+        duration: d,
+        ease: "Cubic.easeOut",
       });
 
       this.tweens.add({
-        targets: centerToLeftShadow,
-        x: this.positions.left.x,
-        scale: 0.3,
-        alpha: 0.3,
-        ease: "Cubic.easeOut",
-        duration: moveDuration,
-      });
-
-      // 오른쪽 -> 중앙으로 이동 & 그림자 제거
-      this.tweens.add({
-        targets: this.rightSprite,
+        targets: [this.rightSprite, this.rightShadow],
         x: this.positions.center.x,
-        scale: 0.4,
+        scale: this.CENTER_SCALE,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
       });
-
       this.tweens.add({
         targets: this.rightShadow,
-        x: this.positions.center.x,
-        scale: 0.4,
         alpha: 0,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
       });
 
-      // 새로운 오른쪽 캐릭터와 그림자 생성
-      const newRightSprite = this.add.sprite(
-        this.positions.right.x + 150,
-        this.positions.right.y,
-        this.getCharKey(1)
-      );
-      const newRightShadow = this.add.rectangle(
-        this.positions.right.x + 150,
-        this.positions.right.y,
-        newRightSprite.width,
-        newRightSprite.height,
-        0x000000,
-        0.4
-      );
+      const newRightSprite = this.add
+        .sprite(
+          this.positions.right.x + 150,
+          this.positions.right.y,
+          this.getCharKey(1)
+        )
+        .setScale(this.SIDE_SCALE)
+        .setAlpha(0)
+        .setDepth(1);
 
-      newRightSprite.setScale(0.3).setAlpha(0).setDepth(1);
-      newRightShadow.setScale(0.3).setAlpha(0).setDepth(2);
+      const newRightShadow = this.add
+        .rectangle(
+          newRightSprite.x,
+          newRightSprite.y,
+          newRightSprite.width,
+          newRightSprite.height,
+          0x000000,
+          this.SHADE_ALPHA
+        )
+        .setScale(this.SIDE_SCALE)
+        .setAlpha(0)
+        .setDepth(2);
 
       this.tweens.add({
         targets: [newRightSprite, newRightShadow],
         x: this.positions.right.x,
         alpha: 1,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
         onComplete: () => {
           this.leftSprite = this.centerSprite;
           this.centerSprite = this.rightSprite;
           this.rightSprite = newRightSprite;
-          this.leftShadow = centerToLeftShadow;
+
+          this.leftShadow = this.centerShadow;
+          this.centerShadow = this.rightShadow;
           this.rightShadow = newRightShadow;
 
-          this.setScalesAndDepths();
+          this.setDepths();
           this.isAnimating = false;
         },
       });
     } else {
-      // 왼쪽으로 슬라이드 (반대 방향)
-      this.rightSprite.setDepth(1);
-      this.centerSprite.setDepth(1);
       this.leftSprite.setDepth(3);
+      this.centerSprite.setDepth(1);
 
-      // 오른쪽 스프라이트와 그림자 페이드아웃
       this.tweens.add({
         targets: [this.rightSprite, this.rightShadow],
         x: this.positions.right.x + 150,
         alpha: 0,
-        duration: moveDuration,
+        duration: d,
         onComplete: () => {
           this.rightSprite.destroy();
           this.rightShadow.destroy();
         },
       });
 
-      // 중앙 -> 오른쪽으로 이동 & 그림자 생성
-      const centerToRightShadow = this.add
-        .rectangle(
-          this.positions.center.x,
-          this.positions.center.y,
-          this.centerSprite.width,
-          this.centerSprite.height,
-          0x000000,
-          0
-        )
-        .setScale(0.4)
-        .setDepth(2);
-
       this.tweens.add({
-        targets: this.centerSprite,
+        targets: [this.centerSprite, this.centerShadow],
         x: this.positions.right.x,
-        scale: 0.3,
+        scale: this.SIDE_SCALE,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
+      });
+      this.tweens.add({
+        targets: this.centerShadow,
+        alpha: this.SHADE_ALPHA,
+        duration: d,
+        ease: "Cubic.easeOut",
       });
 
       this.tweens.add({
-        targets: centerToRightShadow,
-        x: this.positions.right.x,
-        scale: 0.3,
-        alpha: 0.3,
-        ease: "Cubic.easeOut",
-        duration: moveDuration,
-      });
-
-      // 왼쪽 -> 중앙으로 이동 & 그림자 제거
-      this.tweens.add({
-        targets: this.leftSprite,
+        targets: [this.leftSprite, this.leftShadow],
         x: this.positions.center.x,
-        scale: 0.4,
+        scale: this.CENTER_SCALE,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
       });
-
       this.tweens.add({
         targets: this.leftShadow,
-        x: this.positions.center.x,
-        scale: 0.4,
         alpha: 0,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
       });
 
-      // 새로운 왼쪽 캐릭터와 그림자 생성
-      const newLeftSprite = this.add.sprite(
-        this.positions.left.x - 150,
-        this.positions.left.y,
-        this.getCharKey(-1)
-      );
-      const newLeftShadow = this.add.rectangle(
-        this.positions.left.x - 150,
-        this.positions.left.y,
-        newLeftSprite.width,
-        newLeftSprite.height,
-        0x000000,
-        0.3
-      );
+      const newLeftSprite = this.add
+        .sprite(
+          this.positions.left.x - 150,
+          this.positions.left.y,
+          this.getCharKey(-1)
+        )
+        .setScale(this.SIDE_SCALE)
+        .setAlpha(0)
+        .setDepth(1);
 
-      newLeftSprite.setScale(0.3).setAlpha(0).setDepth(1);
-      newLeftShadow.setScale(0.3).setAlpha(0).setDepth(2);
+      const newLeftShadow = this.add
+        .rectangle(
+          newLeftSprite.x,
+          newLeftSprite.y,
+          newLeftSprite.width,
+          newLeftSprite.height,
+          0x000000,
+          this.SHADE_ALPHA
+        )
+        .setScale(this.SIDE_SCALE)
+        .setAlpha(0)
+        .setDepth(2);
 
       this.tweens.add({
         targets: [newLeftSprite, newLeftShadow],
         x: this.positions.left.x,
         alpha: 1,
+        duration: d,
         ease: "Cubic.easeOut",
-        duration: moveDuration,
         onComplete: () => {
           this.rightSprite = this.centerSprite;
           this.centerSprite = this.leftSprite;
           this.leftSprite = newLeftSprite;
-          this.rightShadow = centerToRightShadow;
+
+          this.rightShadow = this.centerShadow;
+          this.centerShadow = this.leftShadow;
           this.leftShadow = newLeftShadow;
 
-          this.setScalesAndDepths();
+          this.setDepths();
           this.isAnimating = false;
         },
       });

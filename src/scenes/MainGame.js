@@ -1,5 +1,6 @@
 // GameScene.js — distance-based set spawner (clean)
 
+import Phaser from "phaser";
 import GameOver from "./GameOver";
 import GameUI from "./GameUI";
 
@@ -69,6 +70,13 @@ export default class GameScene extends Phaser.Scene {
     return Phaser.Math.FloatBetween(min, max);
   }
 
+  // 새로 스폰된 객체에 1회만 좌측 스크롤 속도 부여
+  setScrollVel(obj) {
+    if (!obj?.body || obj.getData?.("isFast")) return;
+    obj.body.setVelocityX(-this.speed);
+    obj.body.setVelocityY(0);
+  }
+
   // ===== Debug (D toggle) =====
   initDebug() {
     this.debug = { on: false, gfx: this.add.graphics().setDepth(9999) };
@@ -113,6 +121,7 @@ export default class GameScene extends Phaser.Scene {
       `characterBar${charIndex}`,
       `assets/images/characterBar${charIndex}.png`
     );
+
     this.load.image("bg_far", "assets/images/bg_far.png");
     this.load.image("bg_near", "assets/images/bg_near.png");
     this.load.image("obs_square", "assets/images/obs_square.png");
@@ -120,6 +129,13 @@ export default class GameScene extends Phaser.Scene {
     this.load.image("coin", "assets/images/coin.png");
     this.load.image("obs_pillar", "assets/images/obs_pillar.png");
     this.textures.get("coin")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    // scene.preload() 어딘가에서
+    this.load.image("gameover", "assets/images/gameover.png");
+    this.load.image("retry", "assets/images/retry.png");
+    this.load.image("zzz", "assets/images/zzz.png");
+    this.load.image("share", "assets/images/share.png");
+    this.load.audio("diesound", "assets/audio/diesound.wav");
+    this.load.audio("coinsound", "assets/audio/coinsound.wav");
   }
 
   create() {
@@ -128,6 +144,33 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.roundPixels = true;
     this.sceneStartAt = this.time.now;
 
+    // SoundEffect
+    this.sfxDie = this.sound.add("diesound", { volume: 0.6 });
+    const COIN_POOL_SIZE = 6;
+    this.coinPool = Array.from(
+      { length: COIN_POOL_SIZE },
+      () => this.sound.add("coinsound", { volume: 0.45 }) // coinsound.wav
+    );
+
+    this.lastCoinSoundAt = 0;
+    this.coinMinIntervalMs = 25; // ✅ 50ms → 15ms로 줄임 (거의 실시간 느낌)
+
+    // ✅ 빠른 재생 함수
+    this.playCoinSfx = () => {
+      const now = this.time.now;
+      if (now - this.lastCoinSoundAt < this.coinMinIntervalMs) return;
+
+      // 풀에서 재생 중이 아닌 걸 하나 골라서 재생 (없으면 0번 재사용)
+      const s = this.coinPool.find((snd) => !snd.isPlaying) || this.coinPool[0];
+
+      // 살짝 음색/속도 랜덤으로 반복 피로감 줄이기(선택)
+      s.setDetune?.(Phaser.Math.Between(-40, 40)); // -40~+40 cent
+      s.setRate?.(1.0 + Phaser.Math.FloatBetween(-0.03, 0.03)); // 0.97~1.03배
+
+      s.play();
+      this.lastCoinSoundAt = now;
+    };
+
     // BG
     this.bgFar = this.add.tileSprite(0, 0, W, H, "bg_far").setOrigin(0);
     this.bgNear = this.add.tileSprite(0, 0, W, H, "bg_near").setOrigin(0);
@@ -135,7 +178,7 @@ export default class GameScene extends Phaser.Scene {
     this.textures.get("bg_near")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     // Player
-    this.player = this.physics.add.sprite(100, H / 2, "player");
+    this.player = this.physics.add.sprite(150, H / 2, "player");
     this.textures.get("player")?.setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.normalizeSprite(this.player, {
       scaleX: 1.4,
@@ -156,16 +199,40 @@ export default class GameScene extends Phaser.Scene {
     space.on("down", () => (this.isPressing = true));
     space.on("up", () => (this.isPressing = false));
 
-    // Speed / difficulty
-    this.baseSpeed = 170;
-    this.speed = this.baseSpeed;
+    // === Speed / difficulty (타이머 + 점수 기반) ===
+    this.baseSpeed = 200; // 시작 속도
+    this.speed = this.baseSpeed; // 현재 실제 속도
+    this.speedMax = 460; // 상한
+    this.targetSpeed = this.speed; // 목표 속도(여기에 수렴)
+    this.speedLerp = 0.08; // 수렴 속도(0~1)
+
     this.speedNearRatio = 1.0;
     this.speedFarRatio = 0.4;
+
+    // 보너스 합산
+    this.timerBonus = 0; // 3.5초마다 증가
+    this.scoreBonus = 0; // 점수 구간마다 증가
+    this.scorePerSpeedUp = 1000; // 1000점마다 한 단계
+    this.speedStep = 100; // 한 단계당 +100
+
+    // ⏱ 3.5초 타이머: speed 직접증가 X, 보너스만 누적
     this.time.addEvent({
-      delay: 3500,
+      delay: 5000,
       loop: true,
-      callback: () => (this.speed = Math.min(this.speed + 18, 330)),
+      callback: () => {
+        this.timerBonus = Math.min(
+          this.timerBonus + this.speedStep,
+          this.speedMax
+        );
+        this.targetSpeed = Phaser.Math.Clamp(
+          this.baseSpeed + this.timerBonus + this.scoreBonus,
+          this.baseSpeed,
+          this.speedMax
+        );
+      },
     });
+
+    // 난이도(원 코드 유지)
     this.difficulty = 0;
     this.time.addEvent({
       delay: 5000,
@@ -183,7 +250,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Rules
     this.rules = {
-      spawnAheadPx: 10,
+      spawnAheadPx: 150,
       setDistMin: 800,
       setDistMax: 1000,
       platformScaleX: 2.8,
@@ -256,9 +323,9 @@ export default class GameScene extends Phaser.Scene {
     // ===== Score & UI (ONLY GameUI) =====
     this.score = 0;
     this.coinCount = 0;
-    this.gameUI = new GameUI(this); // ✅ 게임 내 유일한 UI
-    this.gameUI.updateScore(0); // ✅ UI 초기화
-    this.gameUI.updateCoinCount(0); // ✅ UI 초기화
+    this.gameUI = new GameUI(this);
+    this.gameUI.updateScore(0);
+    this.gameUI.updateCoinCount(0);
 
     // ===== Distance-based set scheduler =====
     this.distSinceSet = 0;
@@ -283,9 +350,6 @@ export default class GameScene extends Phaser.Scene {
     this.isIntro = true;
     this.introTextWidth = 0;
 
-    // 인트로 부스트
-    this.startIntroBoost(1800);
-
     // 시작 텍스트 코인
     this.spawnIntroTextCoins();
 
@@ -293,7 +357,7 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = false;
     this.gameOver = new GameOver(this);
 
-    // create() 끝부분에 추가
+    // Scroll speed 적용기 (speed가 바뀔 때만 setVelocityX)
     this._lastSpeedApplied = null;
     const applyScrollSpeed = () => {
       if (this._lastSpeedApplied === this.speed) return;
@@ -312,7 +376,7 @@ export default class GameScene extends Phaser.Scene {
     };
     this.applyScrollSpeed = applyScrollSpeed;
 
-    // update() 맨 앞/중간쯤에 호출
+    // 최초 1회 적용
     this.applyScrollSpeed();
 
     // Debug
@@ -323,10 +387,11 @@ export default class GameScene extends Phaser.Scene {
   onGameOver() {
     if (this.isGameOver) return;
     this.isGameOver = true;
+    this.sfxDie.play();
     this.physics.pause();
     this.player.setTint(0xff0000);
-    this.gameUI.setVisible(false); // ✅ UI 숨김
-    this.gameOver.show(this.score); // 점수 넘겨도 됨(옵션)
+    this.gameUI.setVisible(false);
+    this.gameOver.show(this.score);
   }
 
   // ===== Common spawners =====
@@ -347,6 +412,7 @@ export default class GameScene extends Phaser.Scene {
     p.body.setSize(bw, bh);
     p.body.setOffset(offX, offY);
     this.snapXY(p);
+    this.setScrollVel(p); // ✅ 스폰 직후 속도 부여
     return p;
   }
 
@@ -374,6 +440,9 @@ export default class GameScene extends Phaser.Scene {
         circle: true,
       });
       this.snapXY(c);
+      c.setImmovable(true);
+      c.body.setAllowGravity(false);
+      this.setScrollVel(c); // ✅ 추가
     }
   }
 
@@ -387,7 +456,10 @@ export default class GameScene extends Phaser.Scene {
       hitboxShrink: 0.65,
       circle: true,
     });
+    coin.setImmovable(true);
+    coin.body.setAllowGravity(false);
     this.snapXY(coin);
+    this.setScrollVel(coin); // ✅ 추가
     return coin;
   }
   createCoinAtScaled(x, y, scale = 0.7, hitboxShrink = 0.88) {
@@ -403,6 +475,7 @@ export default class GameScene extends Phaser.Scene {
     coin.setImmovable(true);
     coin.body.setAllowGravity(false);
     this.snapXY(coin);
+    this.setScrollVel(coin); // ✅ 추가
     return coin;
   }
 
@@ -421,7 +494,7 @@ export default class GameScene extends Phaser.Scene {
       for (let c = 0; c < cols; c++) {
         const x = startX + c * colGap;
         const y = startY + r * rowGap;
-        this.createCoinAt(x, y);
+        this.createCoinAt(x, y); // 내부에서 속도 부여
       }
     }
   }
@@ -526,17 +599,6 @@ export default class GameScene extends Phaser.Scene {
     Phaser.Utils.Array.GetRandom(patterns)();
   }
 
-  // === Intro boost ===
-  startIntroBoost(durationMs = 3000) {
-    this.speed = Math.max(60, this.baseSpeed * 0.4);
-    this.tweens.add({
-      targets: this,
-      speed: 500,
-      duration: durationMs,
-      ease: "Expo.Out",
-    });
-  }
-
   // === "IVE SECRET" 텍스트 코인 ===
   spawnIntroTextCoins() {
     const W = this.scale.width,
@@ -594,20 +656,16 @@ export default class GameScene extends Phaser.Scene {
   }
 
   isIntroTextPassed() {
-    // 인트로 텍스트 시작 X(동일)
     const textStartX = this.scale.width + 140;
 
-    // ✅ 안전한 경과 시간 계산 (초)
     const elapsedSec = Math.max(
       0,
       (this.time.now - (this.sceneStartAt || this.time.now)) / 1000
     );
 
-    // ✅ 이동 거리(속도 변화 고려: 너무 작거나 큰 값 방지)
     const speed = Phaser.Math.Clamp(this.speed || 0, 60, 800);
     const movedDistance = speed * elapsedSec;
 
-    // 텍스트의 오른쪽 끝이 화면 왼쪽을 지나쳤는지 판정
     const textEndX = textStartX + (this.introTextWidth || 0) - movedDistance;
     return textEndX < -50;
   }
@@ -688,6 +746,19 @@ export default class GameScene extends Phaser.Scene {
       hitboxShrink: 0.85,
     });
     this.snapXY(bottom);
+    const shrinkX = 0.4;
+    const shrinkY = 0.9;
+    const newW = bottom.width * shrinkX;
+    const newH = bottom.height * shrinkY;
+
+    // 히트박스 크기 설정
+    bottom.body.setSize(newW, newH);
+
+    // X, Y 둘 다 중앙 정렬
+    const offX = (bottom.width - newW) / 2;
+    const offY = (bottom.height - newH) / 2;
+    bottom.body.setOffset(offX, offY);
+    this.setScrollVel(bottom); // ✅ 추가
 
     const top = this.grpPillars.create(x2, 0, "obs_pillar");
     top.setImmovable(true);
@@ -700,7 +771,13 @@ export default class GameScene extends Phaser.Scene {
       hitboxShrink: 0.85,
     });
     this.snapXY(top);
-
+    this.setScrollVel(top); // ✅ 추가
+    const newW2 = top.width * shrinkX;
+    const newH2 = top.height * shrinkY;
+    top.body.setSize(newW2, newH2);
+    const offX2 = (top.width - newW2) / 2;
+    const offY2 = (top.height - newH2) / 2;
+    top.body.setOffset(offX2, offY2);
     const passageCenterX = (x1 + x2) / 2;
     const passageCenterY = H / 2;
     this.addRandomGapPattern(passageCenterX, passageCenterY);
@@ -779,20 +856,41 @@ export default class GameScene extends Phaser.Scene {
 
   // ===== Score & Coins (UI 업데이트 전용) =====
   collectCoin(coin) {
-    this.coinCount++; // 내부 수치만 증가
-    this.addScore(5); // 점수 추가
-    this.gameUI.updateCoinCount(this.coinCount); // ✅ UI에 반영
+    this.coinCount++;
+    this.addScore(5);
+    this.gameUI.updateCoinCount(this.coinCount);
     coin.destroy();
+    this.playCoinSfx();
   }
   addScore(n = 10) {
     this.score += n;
-    this.gameUI.updateScore(this.score); // ✅ UI에 반영
+    this.gameUI.updateScore(this.score);
+
+    // ✅ 점수 기반 보너스 갱신
+    const steps = Math.floor(this.score / this.scorePerSpeedUp);
+    this.scoreBonus = steps * this.speedStep;
+
+    // ✅ 목표 속도 재계산
+    this.targetSpeed = Phaser.Math.Clamp(
+      this.baseSpeed + this.timerBonus + this.scoreBonus,
+      this.baseSpeed,
+      this.speedMax
+    );
   }
 
   // ===== Update =====
   update(_time, delta) {
     if (this.isGameOver) return;
     const dt = delta / 1000;
+
+    // ✅ 현재 속도를 목표 속도로 부드럽게 수렴
+    this.speed = Phaser.Math.Linear(
+      this.speed,
+      this.targetSpeed,
+      this.speedLerp
+    );
+    // ✅ speed가 바뀐 프레임에만 전역 속도 재적용
+    this.applyScrollSpeed();
 
     // BG parallax
     this.bgFar.tilePositionX += this.speed * this.speedFarRatio * dt;
@@ -834,18 +932,15 @@ export default class GameScene extends Phaser.Scene {
     }
     this.player.y = Phaser.Math.Clamp(this.player.y, 16, this.scale.height);
 
-    // Move left & cleanup
-    const moveLeft = (grp) =>
+    // ✅ 오프스크린 정리만 (속도 설정은 스폰/수정 시에만)
+    const cleanupOffscreen = (grp) =>
       grp.children.iterate((o) => {
         if (!o) return;
-        if (o.getData?.("isFast")) return;
-        o.body.setVelocityX(-this.speed);
-        o.body.setVelocityY(0);
         if (o.x < -220) o.destroy();
       });
-    moveLeft(this.grpPlatforms);
-    moveLeft(this.grpPillars);
-    moveLeft(this.grpCoins);
+    cleanupOffscreen(this.grpPlatforms);
+    cleanupOffscreen(this.grpPillars);
+    cleanupOffscreen(this.grpCoins);
 
     // Intro 상태 체크
     if (this.isIntro && this.isIntroTextPassed()) {
@@ -874,6 +969,9 @@ export default class GameScene extends Phaser.Scene {
       }
       this.nextSetDist = base;
       this.gapCoinDistance = this.nextSetDist * 0.5;
+
+      // 세트 직후 혹시 모를 타이밍 보정
+      this.applyScrollSpeed();
     }
 
     if (
@@ -884,6 +982,7 @@ export default class GameScene extends Phaser.Scene {
     ) {
       this.spawnGapCoins();
       this.gapCoinSpawned = true;
+      this.applyScrollSpeed(); // 갭 코인 스폰 후 보정
     }
 
     // Debug draw

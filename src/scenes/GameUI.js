@@ -20,9 +20,9 @@ export default class GameUI {
 
     // === Score (왼쪽 위) ===
     this.scoreText = this.scene.add
-      .text(20, 20, "Score: 0", {
+      .text(30, 20, "Score: 0", {
         fontSize: "24px",
-        fontFamily: "Arial",
+        fontFamily: "DOSmyungjo",
         color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 3,
@@ -41,18 +41,18 @@ export default class GameUI {
     // === Coin Count (오른쪽 위) ===
     // 코인 아이콘
     this.coinIcon = this.scene.add
-      .image(width - 120, 35, "coin")
+      .image(width - 100, 35, "coin")
       .setOrigin(0.5, 0.5)
-      .setScale(1.2)
+      .setScale(1.0)
       .setDepth(1000)
       .setScrollFactor(0);
 
     // 코인 개수 텍스트
     this.coinText = this.scene.add
-      .text(width - 85, 20, "× 0", {
+      .text(width - 80, 20, "×0", {
         fontSize: "24px",
-        fontFamily: "Arial",
-        color: "#ffdd44",
+        fontFamily: "DOSmyungjo",
+        color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 3,
         shadow: {
@@ -69,54 +69,14 @@ export default class GameUI {
 
     // === Character Image (왼쪽 아래) ===
     this.characterImage = this.scene.add
-      .image(70, height - 70, `characterBar${selectedCharacter}`)
+      .image(100, height - 60, `characterBar${selectedCharacter}`)
       .setOrigin(0.5, 0.5)
       .setScale(1.0)
       .setDepth(1000)
       .setScrollFactor(0);
 
-    // 캐릭터 이미지에 테두리/그림자 효과
-    this.characterBorder = this.scene.add
-      .graphics()
-      .setDepth(999)
-      .setScrollFactor(0);
-
-    this.updateCharacterBorder();
-
     // 리사이즈 이벤트 리스너
     this.scene.scale.on("resize", this.onResize, this);
-  }
-
-  // 캐릭터 이미지 테두리 업데이트
-  updateCharacterBorder() {
-    if (!this.characterImage || !this.characterBorder) return;
-
-    this.characterBorder.clear();
-
-    const bounds = this.characterImage.getBounds();
-    const padding = 4;
-
-    // 배경 (어두운 배경)
-    this.characterBorder
-      .fillStyle(0x000000, 0.6)
-      .fillRoundedRect(
-        bounds.x - padding,
-        bounds.y - padding,
-        bounds.width + padding * 2,
-        bounds.height + padding * 2,
-        8
-      );
-
-    // 테두리 (밝은 테두리)
-    this.characterBorder
-      .lineStyle(2, 0xffffff, 0.8)
-      .strokeRoundedRect(
-        bounds.x - padding,
-        bounds.y - padding,
-        bounds.width + padding * 2,
-        bounds.height + padding * 2,
-        8
-      );
   }
 
   // 점수 업데이트
@@ -131,30 +91,21 @@ export default class GameUI {
     this.coinText.setText(`× ${this.coinCount}`);
   }
 
-  // 캐릭터 변경 (필요시)
-  updateCharacter(characterIndex) {
-    if (this.characterImage) {
-      this.characterImage.setTexture(`characterBar${characterIndex}`);
-      this.updateCharacterBorder();
-    }
-  }
-
   // 리사이즈 처리
   onResize(gameSize) {
     const { width, height } = gameSize;
 
     // 코인 UI 위치 업데이트 (오른쪽 위 고정)
     if (this.coinIcon) {
-      this.coinIcon.setPosition(width - 120, 35);
+      this.coinIcon.setPosition(width - 100, 35);
     }
     if (this.coinText) {
-      this.coinText.setPosition(width - 85, 20);
+      this.coinText.setPosition(width - 80, 20);
     }
 
     // 캐릭터 이미지 위치 업데이트 (왼쪽 아래 고정)
     if (this.characterImage) {
-      this.characterImage.setPosition(70, height - 70);
-      this.updateCharacterBorder();
+      this.characterImage.setPosition(100, height - 60);
     }
   }
 
