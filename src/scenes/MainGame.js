@@ -77,6 +77,7 @@ export default class GameScene extends Phaser.Scene {
     obj.body.setVelocityY(0);
   }
 
+  /* 개발용
   // ===== Debug (D toggle) =====
   initDebug() {
     this.debug = { on: false, gfx: this.add.graphics().setDepth(9999) };
@@ -112,6 +113,7 @@ export default class GameScene extends Phaser.Scene {
     );
     if (this.player) draw(this.player, 0.85);
   }
+  */
 
   // ===== Phaser =====
   preload() {
@@ -378,9 +380,10 @@ export default class GameScene extends Phaser.Scene {
 
     // 최초 1회 적용
     this.applyScrollSpeed();
-
+    /* 개발용
     // Debug
     this.initDebug();
+    */
   }
 
   // ===== GameOver =====
@@ -985,7 +988,9 @@ export default class GameScene extends Phaser.Scene {
       this.applyScrollSpeed(); // 갭 코인 스폰 후 보정
     }
 
+    /* 개발용
     // Debug draw
     this.debugDraw();
+    */
   }
 }
