@@ -70,7 +70,7 @@ export default class GameOver {
     });
 
     // SHARE (텍스트만 트윗 창 열기)
-    this.shareBtn = makeImgBtn(width - 80, height - 65, "share", () => {
+    this.shareBtn = makeImgBtn(width - 85, height - 55, "share", () => {
       this.shareTextOnly();
     });
 
@@ -100,7 +100,7 @@ export default class GameOver {
 
     this.retryBtn.setPosition(centerX - 100, baseY + 97);
     this.homeBtn.setPosition(centerX + 100, baseY + 97);
-    this.shareBtn.setPosition(width - 80, height - 65);
+    this.shareBtn.setPosition(width - 85, height - 55);
   }
 
   // 점수와 함께 보여주기
@@ -134,7 +134,7 @@ export default class GameOver {
   // ✅ 텍스트만 공유: 트윗 작성창 열기 (이미지/캡처 없음)
   shareTextOnly() {
     const score = this.latestScore ?? 0;
-    const text = `꒰১ Take Wing, Cupid! ໒꒱\n점수 ${score}점을 기록하였습니다.\n\n
+    const text = `꒰১ Take Wing, Cupid! ໒꒱\n\n점수 ${score}점을 기록하였습니다.\n
 www.takewingcupid.vercel.app`;
     const composeUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(
       text
