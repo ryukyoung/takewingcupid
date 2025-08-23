@@ -1,6 +1,7 @@
 // GameScene.js — distance-based set spawner (clean)
 
 import GameOver from "./GameOver";
+import GameUI from "./GameUI";
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -107,6 +108,10 @@ export default class GameScene extends Phaser.Scene {
   preload() {
     const charIndex = this.registry.get("selectedCharacter") || 1;
     this.load.image("player", `assets/images/char${charIndex}.png`);
+    this.load.image(
+      `characterBar${charIndex}`,
+      `assets/images/characterBar${charIndex}.png`
+    );
     this.load.image("bg_far", "assets/images/bg_far.png");
     this.load.image("bg_near", "assets/images/bg_near.png");
     this.load.image("obs_square", "assets/images/obs_square.png");
@@ -253,12 +258,9 @@ export default class GameScene extends Phaser.Scene {
       this
     );
 
-    // Score
-    this.score = 0;
-    this.scoreText = this.add.text(10, 10, "Score: 0", {
-      fontSize: "16px",
-      color: "#fff",
-    });
+    // GameUI
+    this.coinCount = 0; // 코인 개수 추가
+    this.gameUI = new GameUI(this);
 
     // ===== Distance-based set scheduler =====
     this.distSinceSet = 0; // 마지막 세트 이후 주행거리(px)
@@ -294,6 +296,10 @@ export default class GameScene extends Phaser.Scene {
 
     this.gameOver = new GameOver(this);
 
+    // Score
+    this.score = 0;
+    this.coinCount = 0;
+    this.gameUI = new GameUI(this);
     // Debug
     this.initDebug();
   }
@@ -304,6 +310,7 @@ export default class GameScene extends Phaser.Scene {
     this.isGameOver = true;
     this.physics.pause();
     this.player.setTint(0xff0000);
+    this.gameUI.setVisible(false);
     this.gameOver.show();
   }
 
@@ -821,7 +828,12 @@ export default class GameScene extends Phaser.Scene {
 
   // ===== Score & Over =====
   collectCoin(coin) {
+    this.coinCount++; // ✅ 코인 개수 증가
     this.addScore(5);
+
+    // UI 업데이트
+    this.gameUI.updateCoinCount(this.coinCount); // ✅ 코인 개수 UI 업데이트
+
     this.tweens.add({
       targets: coin,
       duration: 120,
@@ -832,7 +844,7 @@ export default class GameScene extends Phaser.Scene {
   }
   addScore(n = 10) {
     this.score += n;
-    this.scoreText.setText(`Score: ${this.score}`);
+    this.gameUI.updateScore(this.score);
   }
   gameOver() {
     this.scene.restart();
