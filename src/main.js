@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import TitleScene from "./scenes/Title.js";
 import CharacterSelectScene from "./scenes/CharacterSelect.js";
-import PrologueScene from "./scenes/Prologue.js";
+import Prologue from "./scenes/Prologue.js";
 import GameScene from "./scenes/MainGame.js"; // ← 파일명/경로 확인!
 // GameUI는 scene 배열에서 제거 (GameScene 내부에서 new GameUI(this) 사용)
 
@@ -33,7 +33,7 @@ const config = {
       debug: false,
     },
   },
-  scene: [TitleScene, CharacterSelectScene, PrologueScene, GameScene], // ← GameUI 제거
+  scene: [Prologue, TitleScene, CharacterSelectScene, GameScene], // ← GameUI 제거
 };
 
 const game = new Phaser.Game(config);

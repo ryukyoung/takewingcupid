@@ -26,7 +26,6 @@ export default class CharacterSelect extends Phaser.Scene {
     this._selectLocked = false;
   }
 
-  // 씬에 들어올 때마다 깔끔히 리셋
   init() {
     this.currentIndex = 0;
     this.isAnimating = false;
@@ -38,6 +37,8 @@ export default class CharacterSelect extends Phaser.Scene {
       this.load.image(`License${i}`, `assets/images/License${i}.png`);
     }
     this.load.image("cs_bg", "assets/images/cs_bg.png");
+    this.load.image("cs", "assets/images/cs.png"); // 타이틀 이미지
+    this.load.image("selectBtn", "assets/images/select.png"); // 선택 버튼 이미지
   }
 
   create() {
@@ -45,13 +46,11 @@ export default class CharacterSelect extends Phaser.Scene {
     const centerX = width / 2;
     const centerY = height / 2;
 
-    // TitleScene에서 재생 중인 BGM 참조(없어도 무시)
     this.bgm = this.sound.get("xoxzbgm") || null;
 
-    // 배경
     this.add.image(0, 0, "cs_bg").setOrigin(0, 0).setDepth(0);
 
-    // 뒤로가기 텍스트 버튼 "<"
+    // 뒤로가기 버튼
     this.backButton = this.add
       .text(20, 20, "<", {
         fontFamily: "DOSmyungjo",
@@ -110,7 +109,7 @@ export default class CharacterSelect extends Phaser.Scene {
       )
       .setScale(this.SIDE_SCALE);
 
-    // 그림자(사각형)
+    // 그림자
     this.leftShadow = this.add.rectangle(
       this.leftSprite.x,
       this.leftSprite.y,
@@ -142,35 +141,23 @@ export default class CharacterSelect extends Phaser.Scene {
 
     this.setDepths();
 
-    // 좌/우 화살표
     this.createArrowButtons(centerX, centerY);
 
-    // 화면 아무 곳 클릭으로도 좌/우 슬라이드
     this.input.on("pointerdown", this.handleInput, this);
 
-    // 타이틀
-    const titleText = this.add
-      .text(centerX, 40, "Character Select", {
-        fontFamily: "DOSmyungjo",
-        fontSize: "36px",
-        color: "#ffffff",
-      })
-      .setOrigin(0.5);
+    // === 타이틀 이미지로 교체 ===
+    this.add.image(centerX, 60, "cs").setOrigin(0.5).setScale(0.8);
 
-    // 선택 버튼
-    this.selectText = this.add
-      .text(centerX, height - 50, "Select", {
-        fontFamily: "DOSmyungjo",
-        fontSize: "28px",
-        color: "#ffffff",
-      })
+    // === 선택 버튼 이미지로 교체 ===
+    this.selectBtn = this.add
+      .image(centerX, height - 60, "selectBtn")
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
 
-    this.selectText
+    this.selectBtn
       .on("pointerover", () => {
         this.tweens.add({
-          targets: this.selectText,
+          targets: this.selectBtn,
           alpha: 0.5,
           duration: 120,
           ease: "Quad.easeOut",
@@ -178,7 +165,7 @@ export default class CharacterSelect extends Phaser.Scene {
       })
       .on("pointerout", () => {
         this.tweens.add({
-          targets: this.selectText,
+          targets: this.selectBtn,
           alpha: 1.0,
           duration: 120,
           ease: "Quad.easeOut",
@@ -189,10 +176,8 @@ export default class CharacterSelect extends Phaser.Scene {
         if (this._selectLocked) return;
         this._selectLocked = true;
 
-        // 선택된 캐릭터 저장
         this.registry.set("selectedCharacter", this.currentIndex + 1);
 
-        // BGM 페이드아웃 후 GameScene 전환
         if (this.bgm?.isPlaying) {
           this.tweens.add({
             targets: this.bgm,
@@ -209,28 +194,14 @@ export default class CharacterSelect extends Phaser.Scene {
         }
       });
 
-    // 타이틀 밑 라인
-    const line = this.add.graphics();
-    line.lineStyle(2, 0xffffff, 1);
-    line.beginPath();
-    const lineWidth = titleText.width * 1.1;
-    const startX = titleText.x - lineWidth / 2 - 1;
-    const endX = titleText.x + lineWidth / 2;
-    const y = titleText.y + titleText.height / 2 - 3;
-    line.moveTo(startX, y);
-    line.lineTo(endX, y);
-    line.strokePath();
-
-    // 정리 루틴(씬 떠날 때 리스너 해제)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off("pointerdown", this.handleInput, this);
       this.leftArrow?.removeAllListeners();
       this.rightArrow?.removeAllListeners();
       this.backButton?.removeAllListeners();
-      this.selectText?.removeAllListeners();
+      this.selectBtn?.removeAllListeners();
     });
 
-    // (선택) sleep/wake를 쓰는 경우: 깨우면 자동 새로고침
     this.events.on(Phaser.Scenes.Events.WAKE, () => {
       this.scene.restart();
     });
@@ -362,7 +333,6 @@ export default class CharacterSelect extends Phaser.Scene {
     const d = this.DUR;
 
     if (direction > 0) {
-      // 오른쪽으로 슬라이드
       this.rightSprite.setDepth(3);
       this.centerSprite.setDepth(1);
 
@@ -448,7 +418,6 @@ export default class CharacterSelect extends Phaser.Scene {
         },
       });
     } else {
-      // 왼쪽으로 슬라이드
       this.leftSprite.setDepth(3);
       this.centerSprite.setDepth(1);
 

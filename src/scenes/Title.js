@@ -43,10 +43,14 @@ export default class TitleScene extends Phaser.Scene {
     startButton.on("pointerover", () => startButton.setAlpha(0.5));
     startButton.on("pointerout", () => startButton.setAlpha(1));
 
+    // TitleScene.js create() 함수에서 BGM 부분을 이렇게 수정
     // ===== BGM =====
-    this.bgm =
-      this.sound.get("xoxzbgm") ||
-      this.sound.add("xoxzbgm", { loop: true, volume: 0.5 });
+    this.bgm = this.sound.get("xoxzbgm");
+
+    // BGM이 없거나 재생 중이 아닐 때만 시작
+    if (!this.bgm) {
+      this.bgm = this.sound.add("xoxzbgm", { loop: true, volume: 0.5 });
+    }
 
     const playBGM = async () => {
       try {
@@ -57,19 +61,12 @@ export default class TitleScene extends Phaser.Scene {
           this.sound.unlock();
         }
       } catch (_) {}
-      if (!this.bgm.isPlaying) this.bgm.play();
-    };
 
-    // 즉시 재생 시도 + 첫 입력 시 보장
-    playBGM().catch(() => {});
-    const ensureOnFirstInput = () => {
-      playBGM();
-      this.input.off("pointerdown", ensureOnFirstInput);
-      this.input.keyboard?.off("keydown", ensureOnFirstInput);
+      // 이미 재생 중이 아닐 때만 재생
+      if (!this.bgm.isPlaying) {
+        this.bgm.play();
+      }
     };
-    this.input.once("pointerdown", ensureOnFirstInput);
-    this.input.keyboard?.once("keydown", ensureOnFirstInput);
-
     // ===== Start 동작: 겹침 방지용 정리 후 CharacterSelect로 =====
     startButton.once("pointerup", () => {
       // 혹시 이전 씬/오버레이가 남아있다면 방어적으로 한 번 더 정리
