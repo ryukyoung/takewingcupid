@@ -900,7 +900,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // === Fast Y-guard (pillar gap ban zone) ===
-  setPillarGapForbid(top, bottom, pad = 28) {
+  setPillarGapForbid(top, bottom, pad = 50) {
     // top: 위 기둥, bottom: 아래 기둥
     const topBottomY = top.getBottomCenter().y; // 위 기둥의 아래쪽 끝
     const bottomTopY = bottom.getTopCenter().y; // 아래 기둥의 위쪽 끝
@@ -1053,7 +1053,9 @@ export default class GameScene extends Phaser.Scene {
     let vy = 0;
     if (Math.random() < this.rules.fastDiagonalProb) {
       const dir = Math.random() < 0.5 ? -1 : 1;
-      vy = dir * this.randf(this.rules.fastMaxDY * 0.4, this.rules.fastMaxDY);
+      vy =
+        dir *
+        this.randf(this.rules.fastMaxDY * 0.2, this.rules.fastMaxDY * 0.5);
     }
     f.body.setVelocity(vx, vy);
     f.setData("isFast", true);
