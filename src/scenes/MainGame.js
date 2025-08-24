@@ -181,66 +181,149 @@ export default class GameScene extends Phaser.Scene {
       s.play();
       this.lastCoinSoundAt = now;
     };
+    // 🔊 BGM — 1↔2 번갈아 무한 루프 (COMPLETE만 사용, 단순/안정판)
+    // 씬 입장 즉시 자동으로 시작, 첫 곡 랜덤
+    this.sound.pauseOnBlur = false;
+    this.sound.muteOnBlur = false;
 
-    // 🔊 BGM 시작 (무한 루프)
-    // 🔊 BGM: 무작위 트랙 재생 + 끝나면 다음 곡 자동 재생(무한)
-    this.bgmKeys = ["gamebgm1", "gamebgm2"];
-    this.bgm = null;
+    const fadeMs = 350;
+    const targetVol = 0.5;
 
-    // 직전 곡과 다른 곡을 뽑아주는 헬퍼
-    this.pickNextBgmKey = () => {
-      const prev = this.bgm?.key;
-      const pool = prev
-        ? this.bgmKeys.filter((k) => k !== prev)
-        : this.bgmKeys.slice();
-      return Phaser.Utils.Array.GetRandom(pool);
-    };
+    // 트랙 2개를 미리 만들어 재사용
+    if (!this._tracks) {
+      this._tracks = [
+        this.sound.add("gamebgm1", { loop: false, volume: 0 }),
+        this.sound.add("gamebgm2", { loop: false, volume: 0 }),
+      ];
+    }
+    this._cur = Phaser.Math.Between(0, 1); // 0 또는 1로 랜덤 시작
+    this._bgmAdvancing = false; // 중복 전환 방지
+    this._bgmStarted = false; // 중복 시작 방지
 
-    // 다음 곡 재생(부드러운 크로스페이드)
-    this.playNextBgm = (fadeMs = 350, targetVol = 0.5) => {
-      const nextKey = this.pickNextBgmKey();
-      const next = this.sound.add(nextKey, { loop: false, volume: 0 });
+    // 현재 인덱스 곡을 처음부터 재생 + 이전 곡 페이드아웃/정리
+    this.playNextBgm = () => {
+      if (this.isGameOver) return;
 
-      // 곡이 끝나면 다음 곡으로
+      const next = this._tracks[this._cur];
+      const prev = this._tracks[1 - this._cur];
+
+      // 이전 곡 정리
+      try {
+        prev.stop();
+      } catch (_) {}
+      prev.setVolume(0);
+
+      // COMPLETE 리스너는 항상 1개만
+      next.removeAllListeners(Phaser.Sound.Events.COMPLETE);
       next.once(Phaser.Sound.Events.COMPLETE, () => {
-        if (!this.isGameOver) this.playNextBgm(fadeMs, targetVol);
+        if (this.isGameOver) return;
+        if (this._bgmAdvancing) return;
+        this._bgmAdvancing = true;
+
+        // 인덱스 토글 → 다음 곡 재생
+        this._cur = 1 - this._cur;
+        this.time.delayedCall(0, () => {
+          this._bgmAdvancing = false;
+          this.playNextBgm();
+        });
       });
 
-      // 새 곡 재생 + 페이드인
+      // 재생 + 크로스페이드
+      try {
+        next.stop();
+      } catch (_) {}
+      next.setSeek?.(0);
+      next.setVolume(0);
       next.play();
-      this.tweens.add({ targets: next, volume: targetVol, duration: fadeMs });
-
-      // 이전 곡 페이드아웃 후 정리
-      if (this.bgm) {
-        this.tweens.add({
-          targets: this.bgm,
-          volume: 0,
-          duration: fadeMs,
-          onComplete: () => {
-            this.bgm.stop();
-            this.bgm.destroy();
-          },
-        });
-      }
-      this.bgm = next;
+      this.tweens.add({ targets: next, duration: fadeMs, volume: targetVol });
+      this.tweens.add({
+        targets: prev,
+        duration: fadeMs,
+        volume: 0,
+        onComplete: () => {
+          try {
+            prev.stop();
+          } catch (_) {}
+        },
+      });
     };
 
-    // 최초 1회 시작
-    this.playNextBgm();
+    // BGM 시작 보장(브라우저 오디오 언락/타이밍 가드)
+    const startBgm = () => {
+      if (this.isGameOver || this._bgmStarted) return;
+      this._bgmStarted = true;
+      this.playNextBgm();
+    };
+
+    const forceResumeThenStart = () => {
+      try {
+        this.sound.unlock();
+      } catch (e) {}
+      try {
+        this.sound.context?.resume?.();
+      } catch (e) {}
+
+      // 즉시/짧은 지연 재시도
+      this.time.delayedCall(0, () => {
+        if (
+          !this._bgmStarted &&
+          !this.sound.locked &&
+          this.sound.context?.state === "running"
+        )
+          startBgm();
+      });
+      this.time.delayedCall(80, () => {
+        if (
+          !this._bgmStarted &&
+          !this.sound.locked &&
+          this.sound.context?.state === "running"
+        )
+          startBgm();
+      });
+
+      // 다음 사용자 입력에서 최후 재시도(모바일 대비)
+      const resumeNow = () => {
+        try {
+          this.sound.unlock();
+        } catch (e) {}
+        try {
+          this.sound.context?.resume?.();
+        } catch (e) {}
+        this.input.off("pointerdown", resumeNow);
+        this.input.off("pointerup", resumeNow);
+        this.time.delayedCall(0, startBgm);
+      };
+      this.input.once("pointerdown", resumeNow);
+      this.input.once("pointerup", resumeNow);
+
+      // 혹시 뒤늦게 unlocked 이벤트가 오면 그때도 시작
+      this.sound.once("unlocked", startBgm);
+    };
+
+    // 씬 입장 시 무조건 시작 시도
+    forceResumeThenStart();
 
     // 씬 종료/파괴 시 안전 정리
-    this.events.once("shutdown", () => {
-      this.bgm?.stop();
-      this.bgm?.destroy();
-    });
-    this.events.once("destroy", () => {
-      this.bgm?.stop();
-      this.bgm?.destroy();
-    });
-
-    // 씬 종료 시 혹시 남아있으면 정리
-    this.events.once("shutdown", () => this.bgm?.stop());
-    this.events.once("destroy", () => this.bgm?.stop());
+    const teardownBgm = () => {
+      if (!this._tracks) return;
+      for (const s of this._tracks) {
+        try {
+          this.tweens.killTweensOf(s);
+        } catch (_) {}
+        try {
+          s.removeAllListeners(Phaser.Sound.Events.COMPLETE);
+        } catch (_) {}
+        try {
+          s.stop();
+        } catch (_) {}
+        try {
+          s.destroy();
+        } catch (_) {}
+      }
+      this._tracks = null;
+    };
+    this.events.once("shutdown", teardownBgm);
+    this.events.once("destroy", teardownBgm);
 
     // BG
     this.bgFar = this.add.tileSprite(0, 0, W, H, "bg_far").setOrigin(0);
@@ -345,7 +428,7 @@ export default class GameScene extends Phaser.Scene {
       fastSpeedRatio: 1.85,
       fastDiagonalProb: 0.3,
       fastDoubleProb: 0.2,
-      fastMaxDY: 90,
+      fastMaxDY: 120,
       fastSafeWindowMs: 700,
       wings: {
         gravityY: 1800,
@@ -458,16 +541,33 @@ export default class GameScene extends Phaser.Scene {
     */
   }
 
-  // ===== GameOver =====
   onGameOver() {
     if (this.isGameOver) return;
     this.isGameOver = true;
 
-    // 🔇 BGM 정지
-    this.bgm?.stop();
-    this.bgm?.destroy();
-    this.bgm = null;
+    // 🔇 BGM 완전 종료 (현재 구조 전용)
+    this._bgmAdvancing = false;
 
+    if (this._tracks && Array.isArray(this._tracks)) {
+      for (const s of this._tracks) {
+        // 재생/이벤트/트윈 모두 정리
+        try {
+          this.tweens.killTweensOf(s);
+        } catch (e) {}
+        try {
+          s.removeAllListeners(Phaser.Sound.Events.COMPLETE);
+        } catch (e) {}
+        try {
+          s.stop();
+        } catch (e) {}
+        try {
+          s.destroy();
+        } catch (e) {}
+      }
+      this._tracks = null;
+    }
+
+    // 🔊 사망 효과음 & 게임 정지/연출
     this.sfxDie.play();
     this.physics.pause();
     this.player.setTint(0xff0000);
