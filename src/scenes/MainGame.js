@@ -18,9 +18,15 @@ export default class GameScene extends Phaser.Scene {
   // ===== Utils =====
   normalizeSprite(
     sprite,
-    { scaleX = 1, scaleY = 1, hitboxShrink = 1.0, circle = false } = {}
+    {
+      scaleX = 1,
+      scaleY = 1,
+      hitboxShrink = 1.0,
+      circle = false,
+      preserveOrigin = false,
+    } = {}
   ) {
-    sprite.setOrigin(0.5);
+    if (!preserveOrigin) sprite.setOrigin(0.5);
     sprite.setScale(scaleX, scaleY);
     if (!sprite.body) return;
 
@@ -114,7 +120,8 @@ export default class GameScene extends Phaser.Scene {
     );
     if (this.player) draw(this.player, 0.85);
   }
-*/
+    */
+
   // ===== Phaser =====
   preload() {
     const charIndex = this.registry.get("selectedCharacter") || 1;
@@ -1033,73 +1040,112 @@ export default class GameScene extends Phaser.Scene {
     return len1 > 0 ? this.rand(a1, b1) : this.rand(a2, b2);
   }
 
-  // 수정된 spawnSet_Pillars 메서드와 금지영역 함수
+  // Pillars: fixed Y version (no randomness)
   spawnSet_Pillars(baseX) {
     const H = this.scale.height;
-    const passageY = this.rand(140, H - 140);
-    const gapY = this.rules.pillarGapYMin + this.rand(-10, 20);
 
-    const x1 = baseX;
-    const x2 =
-      baseX +
-      this.rand(this.rules.pillarOffsetX.min, this.rules.pillarOffsetX.max);
+    // ===== 고정값만 사용 =====
+    const FIX = {
+      passageY: 220, // ★ 통로 중심 Y (원하는 값으로 고정)
+      gap: 315, // ★ 위/아래 기둥 사이 기본 간격
+      addEach: 100, // ★ 위/아래 각각 추가 벌림(총 +200)
+      topYOffset: 0, // 미세 보정(위 기둥)
+      bottomYOffset: 0, // 미세 보정(아래 기둥)
+      xLeft: baseX, // 왼쪽(아래) 기둥 X
+      xRight: baseX + 60, // 오른쪽(위) 기둥 X (원하면 고정 숫자로)
+      scaleTop: 4.0,
+      scaleBottom: 4.0,
+      bodyShrinkX: 0.4,
+      bodyShrinkY: 0.9,
+      drawGuides: false, // 가이드선 필요하면 true
+    };
 
-    // Bottom pillar (아래쪽 기둥)
-    const bottom = this.grpPillars.create(x1, 0, "obs_pillar");
-    bottom.setImmovable(true);
-    bottom.body.setAllowGravity(false);
-    bottom.setOrigin(0.5, 1.0).setScale(4.0, 4.0);
-    bottom.y = this.scale.height - 55;
+    const passageY = FIX.passageY;
+    const effectiveGap = Math.max(0, FIX.gap + 2 * FIX.addEach);
+
+    // 설계상 엣지 위치(그대로 사용)
+    const topEdgeY = Math.round(passageY - effectiveGap * 0.5 + FIX.topYOffset);
+    const bottomEdgeY = Math.round(
+      passageY + effectiveGap * 0.5 + FIX.bottomYOffset
+    );
+
+    // ===== 아래 기둥 =====
+    const bottom = this.grpPillars.create(FIX.xLeft, 0, "obs_pillar");
+    bottom.setImmovable(true).body.setAllowGravity(false);
+    bottom.setOrigin(0.5, 1.0).setScale(FIX.scaleBottom, FIX.scaleBottom);
     this.normalizeSprite(bottom, {
       scaleX: bottom.scaleX,
       scaleY: bottom.scaleY,
       hitboxShrink: 0.85,
+      preserveOrigin: true,
     });
+    bottom.body.setSize(
+      bottom.width * FIX.bodyShrinkX,
+      bottom.height * FIX.bodyShrinkY,
+      true
+    );
+    bottom.x = FIX.xLeft;
+    bottom.y = bottomEdgeY; // ★ 고정된 아래 엣지에 배치
     this.snapXY(bottom);
-
-    // Bottom pillar hitbox 조정
-    const shrinkX = 0.4;
-    const shrinkY = 0.9;
-    const newW = bottom.width * shrinkX;
-    const newH = bottom.height * shrinkY;
-    bottom.body.setSize(newW, newH);
-    const offX = (bottom.width - newW) / 2;
-    const offY = (bottom.height - newH) / 2;
-    bottom.body.setOffset(offX, offY);
     this.setScrollVel(bottom);
 
-    // Top pillar (위쪽 기둥)
-    const top = this.grpPillars.create(x2, 0, "obs_pillar");
-    top.setImmovable(true);
-    top.body.setAllowGravity(false);
-    top.setOrigin(0.5, 0.0).setScale(4.0, 4.0);
-    top.y = 55;
+    // ===== 위 기둥 =====
+    const top = this.grpPillars.create(FIX.xRight, 0, "obs_pillar");
+    top.setImmovable(true).body.setAllowGravity(false);
+    top.setOrigin(0.5, 0.0).setScale(FIX.scaleTop, FIX.scaleTop);
     this.normalizeSprite(top, {
       scaleX: top.scaleX,
       scaleY: top.scaleY,
       hitboxShrink: 0.85,
+      preserveOrigin: true,
     });
+    top.body.setSize(
+      top.width * FIX.bodyShrinkX,
+      top.height * FIX.bodyShrinkY,
+      true
+    );
+    top.x = FIX.xRight;
+    top.y = topEdgeY; // ★ 고정된 위 엣지에 배치
     this.snapXY(top);
-
-    // Top pillar hitbox 조정
-    const newW2 = top.width * shrinkX;
-    const newH2 = top.height * shrinkY;
-    top.body.setSize(newW2, newH2);
-    const offX2 = (top.width - newW2) / 2;
-    const offY2 = (top.height - newH2) / 2;
-    top.body.setOffset(offX2, offY2);
     this.setScrollVel(top);
 
-    // Gap 코인 패턴 추가
-    const passageCenterX = (x1 + x2) / 2;
-    const passageCenterY = H / 2;
-    this.addRandomGapPattern(passageCenterX, passageCenterY);
+    // (원하면 가운데 코인 패턴도 고정 Y로)
+    this.addRandomGapPattern((FIX.xLeft + FIX.xRight) / 2, passageY);
 
-    // 🔧 더 긴 딜레이로 금지 영역 설정 (physics world update 완료 후)
-    this.time.delayedCall(50, () => {
-      this.setPillarGapForbidForPillars(top, bottom);
-    });
+    // 금지지대(설계값 기준)
+    const pad = 170;
+    let yMin = topEdgeY + pad;
+    let yMax = bottomEdgeY - pad;
+    if (yMin > yMax) {
+      const mid = (yMin + yMax) / 2;
+      yMin = mid - 6;
+      yMax = mid + 6;
+    }
+    this.forbidFastY = { yMin: Math.max(0, yMin), yMax: Math.min(H, yMax) };
+    this._forbidAnchors = [top, bottom];
+
+    // 가이드선
+    if (FIX.drawGuides) {
+      if (!this._pillarGuideGfx) {
+        this._pillarGuideGfx = this.add
+          .graphics()
+          .setDepth(9997)
+          .setScrollFactor(0);
+      }
+      const g = this._pillarGuideGfx;
+      g.clear();
+      g.lineStyle(1, 0xffff00, 0.9).strokeLineShape(
+        new Phaser.Geom.Line(0, passageY, this.scale.width, passageY)
+      );
+      g.lineStyle(1, 0x00ff00, 0.9).strokeLineShape(
+        new Phaser.Geom.Line(0, topEdgeY, this.scale.width, topEdgeY)
+      );
+      g.strokeLineShape(
+        new Phaser.Geom.Line(0, bottomEdgeY, this.scale.width, bottomEdgeY)
+      );
+    }
   }
+
   // ===== Random set chooser =====
   spawnRandomSet(baseX) {
     const weights = [1, 1, 1, 0.8]; // A,B,C,D
@@ -1150,9 +1196,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   spawnFastOne() {
-    const H = this.scale.height,
-      startX = this.scale.width + 50,
-      y = this.pickFastY(40, H - 40);
+    const H = this.scale.height;
+    const startX = this.scale.width + 50;
+    const y = this.pickFastY(40, H - 40);
+
     const f = this.grpFast.create(startX, y, "obs_square");
     f.setImmovable(true);
     f.body.setAllowGravity(false);
@@ -1161,16 +1208,64 @@ export default class GameScene extends Phaser.Scene {
     this.snapXY(f);
 
     const vx = -this.speed * this.rules.fastSpeedRatio;
+
+    // ▼▼▼ 여기부터: '경사'가 금지대와 교차하면 방향 바꾸거나 수평으로 바꿈 ▼▼▼
+    const allowDiagonal = Math.random() < this.rules.fastDiagonalProb;
     let vy = 0;
-    if (Math.random() < this.rules.fastDiagonalProb) {
+
+    if (allowDiagonal) {
+      // 후보 vy 먼저 뽑기
       const dir = Math.random() < 0.5 ? -1 : 1;
-      vy =
+      const candVy =
         dir *
         this.randf(this.rules.fastMaxDY * 0.2, this.rules.fastMaxDY * 0.5);
+
+      // 비행 시간 계산
+      const t = this.getFastFlightTime(startX, vx /* leftMargin=220 기본 */);
+
+      // 현재 금지대(단일 구간) 기준
+      const ban = this.forbidFastY;
+
+      if (ban && this.pathIntersectsBan(y, candVy, t, ban)) {
+        // 1차 시도: 방향 뒤집어서 다시 체크
+        const flippedVy = -candVy;
+        if (this.pathIntersectsBan(y, flippedVy, t, ban)) {
+          // 2차 시도: 대각선 포기 → 수평
+          vy = 0;
+        } else {
+          vy = flippedVy;
+        }
+      } else {
+        vy = candVy;
+      }
     }
+
     f.body.setVelocity(vx, vy);
     f.setData("isFast", true);
+
     this.time.delayedCall(8000, () => f?.destroy());
+  }
+
+  // fast가 화면을 빠져나갈 때까지의 비행 시간(초) 계산
+  getFastFlightTime(startX, vx, leftMargin = 220) {
+    // x가 -leftMargin까지 가는 시간
+    // vx는 음수(왼쪽)이어야 함
+    const dist = startX + leftMargin;
+    return Math.max(0.0, dist / Math.max(1, Math.abs(vx)));
+  }
+
+  // [y0, y0+vy*t] 구간이 금지 밴드와 겹치면 true
+  pathIntersectsBan(y0, vy, t, ban) {
+    if (!ban) return false;
+    const y1 = y0 + vy * t;
+    const segMin = Math.min(y0, y1);
+    const segMax = Math.max(y0, y1);
+    // 살짝 여유를 두고 판단 (경계 닿아도 위험하게 느껴지면 pad 살짝 키워도 됨)
+    const pad = 4;
+    const bMin = ban.yMin - pad;
+    const bMax = ban.yMax + pad;
+    // [segMin, segMax] 와 [bMin, bMax]가 겹치면 교차
+    return !(segMax < bMin || segMin > bMax);
   }
 
   // ===== Score & Coins (UI 업데이트 전용) =====
