@@ -644,6 +644,104 @@ export default class GameScene extends Phaser.Scene {
       this.createCoinAtScaled(cx + pt.x * scale, cy + pt.y * scale, 0.8, 0.85);
     });
   }
+  addGapCoinPattern_XOXOZ(cx, cy) {
+    const letters = [
+      // X
+      { x: -200, y: -40 },
+      { x: -200, y: 40 },
+      { x: -180, y: -20 },
+      { x: -180, y: 20 },
+      { x: -160, y: 0 },
+      { x: -140, y: -20 },
+      { x: -140, y: 20 },
+      { x: -120, y: 40 },
+      { x: -120, y: -40 },
+      // O
+      { x: -90, y: -10 },
+      { x: -90, y: 10 },
+      { x: -70, y: -35 },
+      { x: -70, y: 35 },
+      { x: -50, y: -40 },
+      { x: -50, y: 40 },
+      { x: -30, y: -35 },
+      { x: -30, y: 35 },
+      { x: -10, y: -10 },
+      { x: -10, y: 10 },
+      // X
+      { x: 20, y: -40 },
+      { x: 20, y: 40 },
+      { x: 40, y: -20 },
+      { x: 40, y: 20 },
+      { x: 60, y: 0 },
+      { x: 80, y: -20 },
+      { x: 80, y: 20 },
+      { x: 100, y: 40 },
+      { x: 100, y: -40 },
+      // Z (위 가로줄)
+      { x: 130, y: -40 },
+      { x: 150, y: -40 },
+      { x: 170, y: -40 },
+      { x: 190, y: -40 },
+      // Z (대각선)
+      { x: 170, y: -20 },
+      { x: 150, y: 0 },
+      { x: 130, y: 20 },
+      // Z (아래 가로줄)
+      { x: 130, y: 40 },
+      { x: 150, y: 40 },
+      { x: 170, y: 40 },
+      { x: 190, y: 40 },
+    ];
+
+    const GRID = 10;
+    const snap = (v) => Math.round(v / GRID) * GRID;
+    letters.forEach((pt) => {
+      this.createCoinAt(snap(cx + pt.x), snap(cy + pt.y));
+    });
+  }
+
+  addGapCoinPattern_Arrow(cx, cy) {
+    const arrowOffsets = [
+      // 몸통
+      { x: -120, y: 0 },
+      { x: -100, y: 0 },
+      { x: -80, y: 0 },
+      { x: -60, y: 0 },
+      { x: -40, y: 0 },
+      { x: -20, y: 0 },
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 40, y: 0 },
+      { x: 60, y: 0 },
+      { x: 80, y: 0 },
+      { x: 120, y: 0 },
+      { x: 130, y: 0 },
+      // 화살촉
+      { x: 140, y: 0 },
+      { x: 120, y: -20 },
+      { x: 120, y: 20 },
+      { x: 100, y: -30 },
+      { x: 100, y: 30 },
+      // 깃털
+      { x: -120, y: -20 },
+      { x: -120, y: 20 },
+      { x: -140, y: 40 },
+      { x: -140, y: -40 },
+      { x: -140, y: 0 },
+      { x: -140, y: -20 },
+      { x: -140, y: 20 },
+      { x: -160, y: -20 },
+      { x: -160, y: 20 },
+      { x: -160, y: 40 },
+      { x: -160, y: -40 },
+      { x: -180, y: -40 },
+      { x: -180, y: 40 },
+    ];
+
+    arrowOffsets.forEach((pt) => {
+      this.createCoinAt(cx + pt.x, cy + pt.y);
+    });
+  }
 
   // === Gap coin spawner ===
   spawnGapCoins() {
@@ -669,6 +767,8 @@ export default class GameScene extends Phaser.Scene {
       () => this.addGapCoinPattern_Circle(cx, cy, 54),
       () => this.addGapCoinPattern_Wave(cx, cy, 220),
       () => this.addGapCoinPattern_Heart(cx, cy + 40, 1.4),
+      () => this.addGapCoinPattern_XOXOZ(cx, cy),
+      () => this.addGapCoinPattern_Arrow(cx, cy),
     ];
     Phaser.Utils.Array.GetRandom(patterns)();
   }
@@ -681,7 +781,7 @@ export default class GameScene extends Phaser.Scene {
     const y = Math.round(H * 0.38);
     this.introTextWidth = this.addCoinText("IVE SECRET", startX, y, {
       cell: 14,
-      scale: 0.68,
+      scale: 0.7,
       kern: 6,
       lineWidth: 1,
     });
@@ -946,7 +1046,7 @@ export default class GameScene extends Phaser.Scene {
     f.setImmovable(true);
     f.body.setAllowGravity(false);
     f.setScale(1.2, 1.2);
-    this.normalizeSprite(f, { scaleX: 1.2, scaleY: 1.2, hitboxShrink: 0.75 });
+    this.normalizeSprite(f, { scaleX: 1.2, scaleY: 1.2, hitboxShrink: 0.55 });
     this.snapXY(f);
 
     const vx = -this.speed * this.rules.fastSpeedRatio;
