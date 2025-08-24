@@ -138,10 +138,10 @@ export default class GameScene extends Phaser.Scene {
     this.load.image("overscore", "assets/images/overscore.png");
     this.load.image("share", "assets/images/share.png");
     this.load.image("uiscore", "assets/images/uiscore.png");
-    this.load.image("x","assets/images/x.png");
+    this.load.image("x", "assets/images/x.png");
     this.load.audio("diesound", "assets/audio/diesound.wav");
     this.load.audio("coinsound", "assets/audio/coinsound.wav");
-    
+
     // 🔊 BGM 추가 (무한 루프)
     this.load.audio("gamebgm1", "assets/audio/gamebgm1.mp3");
     this.load.audio("gamebgm2", "assets/audio/gamebgm2.mp3");
@@ -681,7 +681,7 @@ export default class GameScene extends Phaser.Scene {
     const y = Math.round(H * 0.38);
     this.introTextWidth = this.addCoinText("IVE SECRET", startX, y, {
       cell: 14,
-      scale: 0.7,
+      scale: 0.68,
       kern: 6,
       lineWidth: 1,
     });
