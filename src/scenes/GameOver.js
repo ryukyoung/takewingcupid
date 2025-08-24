@@ -192,7 +192,7 @@ export default class GameOver {
   shareTextOnly() {
     const score = this.latestScore ?? 0;
     const text = `꒰১ Take Wing, Cupid! ໒꒱\n\n점수 ${score}점을 기록하였습니다.\n
-https://www.takewingcupid.vercel.app`;
+https://takewingcupid.vercel.app`;
     const composeUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(
       text
     )}`;
