@@ -76,8 +76,7 @@ export default class GameScene extends Phaser.Scene {
     obj.body.setVelocityX(-this.speed);
     obj.body.setVelocityY(0);
   }
-
-  /* 개발용
+  /*
   // ===== Debug (D toggle) =====
   initDebug() {
     this.debug = { on: false, gfx: this.add.graphics().setDepth(9999) };
@@ -86,6 +85,8 @@ export default class GameScene extends Phaser.Scene {
       if (this.physics.world.debugGraphic)
         this.physics.world.debugGraphic.setDepth(9998);
     }
+    this._forbidGfx = this.add.graphics().setDepth(9999);
+
     this.input.keyboard.addKey("D").on("down", () => {
       this.debug.on = !this.debug.on;
       this.debug.gfx.clear();
@@ -113,8 +114,7 @@ export default class GameScene extends Phaser.Scene {
     );
     if (this.player) draw(this.player, 0.85);
   }
-  */
-
+*/
   // ===== Phaser =====
   preload() {
     const charIndex = this.registry.get("selectedCharacter") || 1;
@@ -334,12 +334,12 @@ export default class GameScene extends Phaser.Scene {
       coinPadMin: 16,
       pillarGapYMin: 150,
       pillarOffsetX: { min: 50, max: 80 },
-      fastPeriodMs: 8000,
+      fastPeriodMs: 7500,
       fastSpeedRatio: 1.85,
       fastDiagonalProb: 0.3,
-      fastDoubleProb: 0.14,
-      fastMaxDY: 170,
-      fastSafeWindowMs: 800,
+      fastDoubleProb: 0.2,
+      fastMaxDY: 90,
+      fastSafeWindowMs: 700,
       wings: {
         gravityY: 1800,
         fastFallMult: 1.15,
@@ -445,7 +445,7 @@ export default class GameScene extends Phaser.Scene {
 
     // 최초 1회 적용
     this.applyScrollSpeed();
-    /* 개발용
+    /*
     // Debug
     this.initDebug();
     */
@@ -885,6 +885,8 @@ export default class GameScene extends Phaser.Scene {
     const pTop = this.createPlatformAt(baseX, topY);
     const pBot = this.createPlatformAt(baseX, botY);
 
+    this.setPillarGapForbid(pTop, pBot, 100);
+
     const centerX = baseX + this.rand(450, 550);
     const pMid = this.createPlatformAt(centerX, centerY);
     this.addCoinGridBelowPlatform(pMid, 10, 5, 28, 28, 40);
@@ -898,18 +900,115 @@ export default class GameScene extends Phaser.Scene {
       this.pendingTailPad += this.rules.twoLayerChainTailPadPx || 0;
     }
   }
+  // 🔧 Pillar 전용 금지 영역 설정 함수 추가
+  // 🔧 Pillar 전용 금지 영역 설정 함수 (완전 재작성)
+  setPillarGapForbidForPillars(topPillar, bottomPillar) {
+    // 🔍 상세 디버그 정보
+    console.log("=== PILLAR GAP DEBUG ===");
+    console.log("Top pillar details:", {
+      sprite_x: topPillar.x,
+      sprite_y: topPillar.y,
+      sprite_originX: topPillar.originX,
+      sprite_originY: topPillar.originY,
+      sprite_scaleX: topPillar.scaleX,
+      sprite_scaleY: topPillar.scaleY,
+      sprite_width: topPillar.width,
+      sprite_height: topPillar.height,
+      body_x: topPillar.body.x,
+      body_y: topPillar.body.y,
+      body_width: topPillar.body.width,
+      body_height: topPillar.body.height,
+      body_top: topPillar.body.top,
+      body_bottom: topPillar.body.bottom,
+      body_offsetX: topPillar.body.offset.x,
+      body_offsetY: topPillar.body.offset.y,
+    });
 
+    console.log("Bottom pillar details:", {
+      sprite_x: bottomPillar.x,
+      sprite_y: bottomPillar.y,
+      sprite_originX: bottomPillar.originX,
+      sprite_originY: bottomPillar.originY,
+      sprite_scaleX: bottomPillar.scaleX,
+      sprite_scaleY: bottomPillar.scaleY,
+      sprite_width: bottomPillar.width,
+      sprite_height: bottomPillar.height,
+      body_x: bottomPillar.body.x,
+      body_y: bottomPillar.body.y,
+      body_width: bottomPillar.body.width,
+      body_height: bottomPillar.body.height,
+      body_top: bottomPillar.body.top,
+      body_bottom: bottomPillar.body.bottom,
+      body_offsetX: bottomPillar.body.offset.x,
+      body_offsetY: bottomPillar.body.offset.y,
+    });
+
+    // 🔧 실제 collision body의 경계 사용 (Phaser의 계산된 값)
+    const topBottomEdge = topPillar.body.bottom;
+    const bottomTopEdge = bottomPillar.body.top;
+
+    console.log("Gap calculation:", {
+      topBottomEdge,
+      bottomTopEdge,
+      rawGap: bottomTopEdge - topBottomEdge,
+      screenHeight: this.scale.height,
+    });
+
+    // Gap 검증
+    const actualGap = bottomTopEdge - topBottomEdge;
+    if (actualGap <= 0) {
+      console.log("❌ Invalid gap - pillars overlapping or in wrong order");
+      return;
+    }
+
+    if (actualGap < 100) {
+      console.log("⚠️ Gap too small:", actualGap);
+      // 아주 작은 gap도 금지
+      this.forbidFastY = {
+        yMin: topBottomEdge - 20,
+        yMax: bottomTopEdge + 20,
+      };
+    } else {
+      // 정상적인 gap - 중앙 80% 정도를 금지구역으로
+      const margin = actualGap * 0.2; // 양쪽에 20%씩 여유
+      const yMin = topBottomEdge + margin;
+      const yMax = bottomTopEdge - margin;
+
+      this.forbidFastY = { yMin, yMax };
+      console.log("✅ Normal gap forbid zone:", { yMin, yMax, margin });
+    }
+
+    this._forbidAnchors = [topPillar, bottomPillar];
+
+    console.log("Final forbid zone set:", this.forbidFastY);
+    console.log("========================");
+  }
   // === Fast Y-guard (pillar gap ban zone) ===
-  setPillarGapForbid(top, bottom, pad = 50) {
-    // top: 위 기둥, bottom: 아래 기둥
-    const topBottomY = top.getBottomCenter().y; // 위 기둥의 아래쪽 끝
-    const bottomTopY = bottom.getTopCenter().y; // 아래 기둥의 위쪽 끝
+  setPillarGapForbid(top, bottom, pad = 170) {
+    const topBottomY = top.body?.bottom ?? top.getBottomCenter().y;
+    const bottomTopY = bottom.body?.top ?? bottom.getTopCenter().y;
 
-    // 패딩을 준 금지 구간 저장
-    this.forbidFastY = {
-      yMin: Math.min(topBottomY + pad, bottomTopY - pad),
-      yMax: Math.max(topBottomY + pad, bottomTopY - pad),
-    };
+    const gap = bottomTopY - topBottomY; // 사용 가능한 실제 세로 gap
+    const MIN_BAND = 120; // 금지 밴드 최소 높이(원하는 값으로)
+    let effPad = pad;
+
+    // pad*2가 gap을 잠식하면 pad를 자동 축소
+    if (gap - 2 * effPad < MIN_BAND) {
+      effPad = Math.max(0, (gap - MIN_BAND) / 2);
+    }
+
+    let yMin = topBottomY + effPad;
+    let yMax = bottomTopY - effPad;
+
+    if (yMin > yMax) {
+      // 최후의 안전장치 (아주 얇은 밴드)
+      const mid = (topBottomY + bottomTopY) / 2;
+      yMin = mid - 2;
+      yMax = mid + 2;
+    }
+
+    this.forbidFastY = { yMin, yMax };
+    this._forbidAnchors = [top, bottom];
   }
 
   pickFastY(minY = 40, maxY = this.scale.height - 40) {
@@ -934,6 +1033,7 @@ export default class GameScene extends Phaser.Scene {
     return len1 > 0 ? this.rand(a1, b1) : this.rand(a2, b2);
   }
 
+  // 수정된 spawnSet_Pillars 메서드와 금지영역 함수
   spawnSet_Pillars(baseX) {
     const H = this.scale.height;
     const passageY = this.rand(140, H - 140);
@@ -944,6 +1044,7 @@ export default class GameScene extends Phaser.Scene {
       baseX +
       this.rand(this.rules.pillarOffsetX.min, this.rules.pillarOffsetX.max);
 
+    // Bottom pillar (아래쪽 기둥)
     const bottom = this.grpPillars.create(x1, 0, "obs_pillar");
     bottom.setImmovable(true);
     bottom.body.setAllowGravity(false);
@@ -955,6 +1056,8 @@ export default class GameScene extends Phaser.Scene {
       hitboxShrink: 0.85,
     });
     this.snapXY(bottom);
+
+    // Bottom pillar hitbox 조정
     const shrinkX = 0.4;
     const shrinkY = 0.9;
     const newW = bottom.width * shrinkX;
@@ -965,6 +1068,7 @@ export default class GameScene extends Phaser.Scene {
     bottom.body.setOffset(offX, offY);
     this.setScrollVel(bottom);
 
+    // Top pillar (위쪽 기둥)
     const top = this.grpPillars.create(x2, 0, "obs_pillar");
     top.setImmovable(true);
     top.body.setAllowGravity(false);
@@ -976,19 +1080,26 @@ export default class GameScene extends Phaser.Scene {
       hitboxShrink: 0.85,
     });
     this.snapXY(top);
-    this.setScrollVel(top);
+
+    // Top pillar hitbox 조정
     const newW2 = top.width * shrinkX;
     const newH2 = top.height * shrinkY;
     top.body.setSize(newW2, newH2);
     const offX2 = (top.width - newW2) / 2;
     const offY2 = (top.height - newH2) / 2;
     top.body.setOffset(offX2, offY2);
+    this.setScrollVel(top);
+
+    // Gap 코인 패턴 추가
     const passageCenterX = (x1 + x2) / 2;
     const passageCenterY = H / 2;
     this.addRandomGapPattern(passageCenterX, passageCenterY);
-    this.setPillarGapForbid(top, bottom, 28);
-  }
 
+    // 🔧 더 긴 딜레이로 금지 영역 설정 (physics world update 완료 후)
+    this.time.delayedCall(50, () => {
+      this.setPillarGapForbidForPillars(top, bottom);
+    });
+  }
   // ===== Random set chooser =====
   spawnRandomSet(baseX) {
     const weights = [1, 1, 1, 0.8]; // A,B,C,D
@@ -1151,8 +1262,7 @@ export default class GameScene extends Phaser.Scene {
       this.isIntro = false;
     }
     cleanupOffscreen(this.grpPillars);
-    // 기둥이 더 이상 없으면 금지대역 해제
-    if (this.grpPillars.countActive(true) === 0) this.forbidFastY = null;
+
     // Distance-based spawning
     const dtPx = this.speed * dt;
     this.distSinceSet += dtPx;
@@ -1190,8 +1300,26 @@ export default class GameScene extends Phaser.Scene {
       this.gapCoinSpawned = true;
       this.applyScrollSpeed(); // 갭 코인 스폰 후 보정
     }
-
-    /* 개발용
+    if (this._forbidGfx) {
+      this._forbidGfx.clear();
+      if (this.forbidFastY) {
+        this._forbidGfx.fillStyle(0xff0000, 0.25); // 빨간 반투명
+        this._forbidGfx.fillRect(
+          0,
+          this.forbidFastY.yMin,
+          this.scale.width,
+          this.forbidFastY.yMax - this.forbidFastY.yMin
+        );
+      }
+    }
+    if (this._forbidAnchors) {
+      const [a, b] = this._forbidAnchors;
+      if (!a?.active || !b?.active) {
+        this.forbidFastY = null;
+        this._forbidAnchors = null;
+      }
+    }
+    /*
     // Debug draw
     this.debugDraw();
     */
