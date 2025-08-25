@@ -13,6 +13,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@vercel/analytics": "^1.5.0",
     "phaser": "^3.90.0"
   },
   "devDependencies": {
