@@ -2,10 +2,18 @@
 
 > **IVE의 4th EP 'IVE SECRET' 프로모션을 위해 제작한 팬메이드 2D 픽셀 아트 횡스크롤 게임**
 
-**Take Wing, CUPID!**은 IVE의 `IVE SECRET` 앨범 프로모션을 목적으로 제작한 팬메이드 게임입니다. <br>
+**Take Wing, CUPID!** 은 IVE의 `IVE SECRET` 앨범 프로모션을 목적으로 제작한 팬메이드 게임입니다. <br>
 `XOXZ` 뮤직비디오의 분위기와 배경을 바탕으로 픽셀 아트 스타일의 횡스크롤 게임으로 제작했습니다.
 
 <br>
+<img width="330" alt="프롤로그" src="https://github.com/user-attachments/assets/2bed433d-b9ed-48cd-99bd-49ac429aa727" />
+<img width="330" alt="캐릭터설정" src="https://github.com/user-attachments/assets/76a4bd2b-7c0b-4217-9e98-606e86cb6eac" />
+<img width="330" alt="게임플레이2" src="https://github.com/user-attachments/assets/f3db1873-a23f-4312-94a8-afdf978d6936" />
+
+
+
+
+<br><br>
 
 ## 🎮 Game
 
@@ -14,7 +22,7 @@
 * 👤 **플레이어 선택** — 6명의 캐릭터 중 하나를 선택
 * 💔 **아이템 획득** — 깨진 하트를 획득하여 점수 획득
 * 🧱 **고정 장애물** — 진행 경로에 배치된 장애물
-* 💨 **이동 장애물** — 멀리서 갑작스럽게 날아오는 장애물
+* 🕊️ **이동 장애물** — 멀리서 갑작스럽게 날아오는 장애물
 * 🏆 **점수 기록** — 획득한 하트에 따라 점수 집계
 * 📤 **결과 공유** — 게임오버 화면에서 플레이 결과 공유
 
@@ -76,16 +84,7 @@
 
 ## 🌐 Play
 
-**[Take Wing, CUPID! 바로 플레이하기 →](https://takewingcupid.vercel.app/)**
-
-<br>
-
-## 🐛 Bug Report
-
-게임 플레이 중 오류를 발견하셨다면 아래 X(Twitter) 계정으로 DM을 보내주세요.
-
-* [@orthowy](https://x.com/orthowy)
-* [@manaknotguns](https://x.com/manaknotguns)
+**[Take Wing, CUPID! 바로 플레이하기](https://takewingcupid.vercel.app/)**
 
 <br>
 
