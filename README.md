@@ -1,6 +1,6 @@
 # 🪽 Take Wing, CUPID!
 
-> **IVE의 정규 앨범 `IVE SECRET` 프로모션을 위해 제작한 팬메이드 2D 픽셀 아트 횡스크롤 게임**
+> **IVE의 4th EP 'IVE SECRET' 프로모션을 위해 제작한 팬메이드 2D 픽셀 아트 횡스크롤 게임**
 
 **Take Wing, CUPID!**은 IVE의 `IVE SECRET` 앨범 프로모션을 목적으로 제작한 팬메이드 게임입니다. <br>
 `XOXZ` 뮤직비디오의 분위기와 배경을 바탕으로 픽셀 아트 스타일의 횡스크롤 게임으로 제작했습니다.
